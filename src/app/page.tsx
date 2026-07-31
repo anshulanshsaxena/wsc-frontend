@@ -129,9 +129,6 @@ export default function HomePage() {
       {/* Compare Resorts CTA */}
       <CompareResortsCTA />
 
-      {/* Manual Sequence 10 Sorting Categories */}
-      <DynamicSortings sequenceFilter={10} onTileClick={handleTileClick} />
-
       {/* Promotional Offer Brackets */}
       <PromoBracket guestCount={100} onViewAll={handleOpenAllOffers} />
       <PromoBracket guestCount={150} onViewAll={handleOpenAllOffers} />
@@ -146,9 +143,6 @@ export default function HomePage() {
 
       {/* Netflix-style Top 10 Collections */}
       <Top10Collections />
-
-      {/* Manual Sequence 20 Sorting Categories */}
-      <DynamicSortings sequenceFilter={20} onTileClick={handleTileClick} />
 
       {/* Modals & Overlays */}
       <OfferLeadModal isOpen={isLeadModalOpen} onClose={() => setIsLeadModalOpen(false)} />
