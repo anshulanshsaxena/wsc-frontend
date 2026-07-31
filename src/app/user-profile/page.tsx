@@ -28,6 +28,7 @@ import Navbar from '@/components/layout/Navbar';
 import ConsentPopup from '@/components/modals/ConsentPopup';
 import InlineSearchBar from '@/components/home/InlineSearchBar';
 import PromoBracket from '@/components/home/PromoBracket';
+import AllOffersModal from '@/components/modals/AllOffersModal';
 import SandboxDrawer from '@/components/modals/SandboxDrawer';
 
 function UserProfileContent() {
@@ -71,6 +72,35 @@ function UserProfileContent() {
   // Compare Selections
   const [compareSelections, setCompareSelections] = useState<string[]>([]);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  // Promo Bracket All Offers Modal States
+  const [isAllOffersModalOpen, setIsAllOffersModalOpen] = useState(false);
+  const [selectedOfferBracket, setSelectedOfferBracket] = useState<number | null>(null);
+  const [allResortOffers, setAllResortOffers] = useState<any[]>([]);
+
+  // Fetch resort offers for AllOffersModal
+  useEffect(() => {
+    async function fetchOffers() {
+      try {
+        const snap = await getDocs(collection(db, "resort_offers"));
+        const offers: any[] = [];
+        snap.forEach((d) => {
+          if (d.data().isActive !== false) {
+            offers.push(d.data());
+          }
+        });
+        setAllResortOffers(offers);
+      } catch (err) {
+        console.error("Error fetching resort offers:", err);
+      }
+    }
+    fetchOffers();
+  }, []);
+
+  const handleOpenAllOffers = (bracket: number) => {
+    setSelectedOfferBracket(bracket);
+    setIsAllOffersModalOpen(true);
+  };
 
   // View All Similar Resorts Modal
   const [viewAllLocation, setViewAllLocation] = useState('');
@@ -733,7 +763,7 @@ function UserProfileContent() {
               {/* HERO COVER LAUNCHPAD */}
               <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl min-h-[380px] md:min-h-[460px] flex flex-col justify-end p-6 md:p-12 text-white border border-gray-100">
                 <img
-                  src="https://firebasestorage.googleapis.com/v0/b/saas-c8ee9-c4tkm-india/o/user%20profile%20cover.jpeg?alt=media&token=1f844bce-8487-4f36-a5d8-a28dd171c871"
+                  src="https://firebasestorage.googleapis.com/v0/b/saas-c8ee9-c4tkm-india/o/profileuser%20heroimage.webp?alt=media&token=28492e73-220d-4383-839f-309e3738ef26"
                   alt="Destination Wedding"
                   className="absolute inset-0 w-full h-full object-cover"
                 />
@@ -840,9 +870,9 @@ function UserProfileContent() {
                 </section>
               )}
 
-              {/* PROMOTIONAL OFFER TILES BRACKET */}
+{/* PROMOTIONAL OFFER TILES BRACKET */}
 <section>
-  <PromoBracket guestCount={latestBudget?.guests || 150} />
+  <PromoBracket guestCount={latestBudget?.guests || 150} onViewAll={handleOpenAllOffers} />
 </section>
 
               {/* SIMILAR RESORTS TO FAVORITES */}
@@ -1682,6 +1712,15 @@ function UserProfileContent() {
         </div>
       )}
 
+{/* ALL OFFERS MODAL */}
+      <AllOffersModal
+        isOpen={isAllOffersModalOpen}
+        onClose={() => setIsAllOffersModalOpen(false)}
+        bracket={selectedOfferBracket}
+        offers={allResortOffers}
+      />
+
+      {/* User Consent */}
       {/* User Consent */}
       <ConsentPopup />
     </div>
