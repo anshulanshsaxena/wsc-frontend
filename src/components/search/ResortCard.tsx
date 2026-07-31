@@ -29,7 +29,7 @@ export default function ResortCard({
   const starRatingDisplay = `${rawStar} Star`;
 
   // 2. Capacity Range Calculation (rooms * 2 to rooms * 3)
-  const roomCount = parseInt(resort.core_rooms || resort.rooms || 0) || 0;
+  const roomCount = Number(resort.core_rooms || resort.rooms || 0) || 0;
   const minGuests = roomCount * 2;
   const maxGuests = roomCount * 3;
   const capacityRangeStr = roomCount > 0 ? `${minGuests}-${maxGuests} Guests` : "";
