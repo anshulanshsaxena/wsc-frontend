@@ -46,6 +46,7 @@ export default function InlineSearchBar({ onSearchStart }: InlineSearchBarProps)
   const [warningVisible, setWarningVisible] = useState(false);
   const [filteredLocs, setFilteredLocs] = useState<SearchIndexItem[]>([]);
   const [filteredResorts, setFilteredResorts] = useState<SearchIndexItem[]>([]);
+  const calendarCells = [];
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { currentPlaceholder, fadeState } = usePlaceholderAnimation(PLACEHOLDERS);
