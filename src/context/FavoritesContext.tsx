@@ -19,6 +19,7 @@ interface FavoritesContextType {
   setPendingFavorite: (fav: PendingFavorite | null) => void;
   toggleFavorite: (resortId: string, resortName?: string) => Promise<void>;
   isFavorite: (resortId: string) => boolean;
+  [key: string]: any;
 }
 
 const FavoritesContext = createContext<FavoritesContextType | undefined>(undefined);
