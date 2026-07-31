@@ -113,7 +113,7 @@ export const ResortDetailsDynamic: React.FC<ResortDetailsDynamicProps> = ({
         const suffix = node.isRepeatable ? `_${i}` : currentSuffix;
         const children = (node.items || []).map((child: any) => renderNode(child, suffix));
 
-        const hasContent = children.some((c) => c !== null);
+        const hasContent = children.some((c: any) => c !== null);
 
         if (hasContent) {
           const instanceLabel = node.isRepeatable ? ` #${i + 1}` : '';
