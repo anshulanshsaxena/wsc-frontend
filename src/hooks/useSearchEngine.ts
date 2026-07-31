@@ -242,10 +242,10 @@ export function useSearchEngine() {
     } else if (sortOption === "price_high_low") {
       result.sort((a, b) => safeNum(getLowestPrice(b, priceFieldIds), 0) - safeNum(getLowestPrice(a, priceFieldIds), 0));
     } else if (sortOption === "discount_high_low") {
-      result.sort((a, b) => extractDiscountVal(b.core_offer) - extractDiscountVal(a.core_offer));
-    } else if (sortOption === "discount_low_high") {
-      result.sort((a, b) => extractDiscountVal(a.core_offer) - extractDiscountVal(b.core_offer));
-    } else if (sortOption === "rooms_high_low") {
+  result.sort((a, b) => extractDiscountVal(b.core_offer || "") - extractDiscountVal(a.core_offer || ""));
+} else if (sortOption === "discount_low_high") {
+  result.sort((a, b) => extractDiscountVal(a.core_offer || "") - extractDiscountVal(b.core_offer || ""));
+} else if (sortOption === "rooms_high_low") {
       result.sort((a, b) => safeNum(b.core_rooms, 0) - safeNum(a.core_rooms, 0));
     } else if (sortOption === "rooms_low_high") {
       result.sort((a, b) => safeNum(a.core_rooms, 0) - safeNum(b.core_rooms, 0));
