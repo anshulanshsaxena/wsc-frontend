@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom Resort Calendar Scrollbars & Utilities */
+.calendar-scroll::-webkit-scrollbar { 
+  height: 6px; 
+}
+.calendar-scroll::-webkit-scrollbar-track { 
+  background: #FAF6F0; 
+  border-radius: 10px; 
+}
+.calendar-scroll::-webkit-scrollbar-thumb { 
+  background: rgba(107, 13, 36, 0.2); 
+  border-radius: 10px; 
+}
+
+.hide-scrollbar::-webkit-scrollbar { 
+  display: none; 
+}
+.hide-scrollbar { 
+  -ms-overflow-style: none; 
+  scrollbar-width: none; 
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
