@@ -841,9 +841,9 @@ function UserProfileContent() {
               )}
 
               {/* PROMOTIONAL OFFER TILES BRACKET */}
-              <section>
-                <PromoBracket />
-              </section>
+<section>
+  <PromoBracket guestCount={latestBudget?.guests || 150} />
+</section>
 
               {/* SIMILAR RESORTS TO FAVORITES */}
               {Object.keys(similarByLocation).length > 0 && (
