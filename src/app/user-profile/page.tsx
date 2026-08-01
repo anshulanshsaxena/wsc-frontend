@@ -29,6 +29,7 @@ import ConsentPopup from '@/components/modals/ConsentPopup';
 import InlineSearchBar from '@/components/home/InlineSearchBar';
 import PromoBracket from '@/components/home/PromoBracket';
 import AllOffersModal from '@/components/modals/AllOffersModal';
+import WeddingItineraryCreator from '@/components/profile/WeddingItineraryCreator';
 import SandboxDrawer from '@/components/modals/SandboxDrawer';
 
 function UserProfileContent() {
@@ -53,7 +54,7 @@ function UserProfileContent() {
   // Saved Budgets Data States
   const [budgets, setBudgets] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [displayLimit, setDisplayLimit] = useState(10);
+  const [displayLimit, setDisplayLimit] = useState(8);
   const [userFavorites, setUserFavorites] = useState<any[]>([]);
 
   // Hero Launchpad Interactive States
@@ -78,11 +79,47 @@ function UserProfileContent() {
   const [selectedOfferBracket, setSelectedOfferBracket] = useState<number | null>(null);
   const [allResortOffers, setAllResortOffers] = useState<any[]>([]);
 
+  // View All Similar Resorts Modal
+  const [viewAllLocation, setViewAllLocation] = useState('');
+  const [viewAllResorts, setViewAllResorts] = useState<any[]>([]);
+  const [viewAllModalOpen, setViewAllModalOpen] = useState(false);
+
+  // Record budget card click timestamp for priority sorting (Moves clicked card to #1 position)
+  const recordBudgetClick = (docId: string) => {
+    try {
+      const clicks = JSON.parse(localStorage.getItem('wsc_budget_clicks') || '{}');
+      clicks[docId] = Date.now();
+      localStorage.setItem('wsc_budget_clicks', JSON.stringify(clicks));
+
+      setBudgets((prev) => {
+        const updated = [...prev];
+        updated.sort((a, b) => {
+          const cA = clicks[a.docId] || 0;
+          const cB = clicks[b.docId] || 0;
+          if (cA !== cB) return cB - cA;
+
+          const tA = a.createdAt
+            ? typeof a.createdAt.toMillis === 'function'
+              ? a.createdAt.toMillis()
+              : new Date(a.createdAt).valueOf()
+            : 0;
+          const tB = b.createdAt
+            ? typeof b.createdAt.toMillis === 'function'
+              ? b.createdAt.toMillis()
+              : new Date(b.createdAt).valueOf()
+            : 0;
+          return tB - tA;
+        });
+        return updated;
+      });
+    } catch (e) {}
+  };
+
   // Fetch resort offers for AllOffersModal
   useEffect(() => {
     async function fetchOffers() {
       try {
-        const snap = await getDocs(collection(db, "resort_offers"));
+        const snap = await getDocs(collection(db, 'resort_offers'));
         const offers: any[] = [];
         snap.forEach((d) => {
           if (d.data().isActive !== false) {
@@ -91,7 +128,7 @@ function UserProfileContent() {
         });
         setAllResortOffers(offers);
       } catch (err) {
-        console.error("Error fetching resort offers:", err);
+        console.error('Error fetching resort offers:', err);
       }
     }
     fetchOffers();
@@ -102,13 +139,8 @@ function UserProfileContent() {
     setIsAllOffersModalOpen(true);
   };
 
-  // View All Similar Resorts Modal
-  const [viewAllLocation, setViewAllLocation] = useState('');
-  const [viewAllResorts, setViewAllResorts] = useState<any[]>([]);
-  const [viewAllModalOpen, setViewAllModalOpen] = useState(false);
-
   // -------------------------------------------------------------
-  // COUNTDOWN & TIMELINE HELPERS
+  // COUNTDOWN HELPER
   // -------------------------------------------------------------
   const latestBudget = budgets.length > 0 ? budgets[0] : null;
 
@@ -116,45 +148,29 @@ function UserProfileContent() {
     if (!latestBudget || !latestBudget.checkInDate || latestBudget.checkInDate === 'Not Selected') {
       return null;
     }
-    const checkIn = new Date(latestBudget.checkInDate + 'T00:00:00');
+
+    let checkIn: Date;
+    const checkInStr = latestBudget.checkInDate;
+    if (checkInStr.includes('T')) {
+      checkIn = new Date(checkInStr);
+    } else if (checkInStr.includes('-')) {
+      checkIn = new Date(checkInStr + 'T00:00:00');
+    } else {
+      checkIn = new Date(checkInStr);
+    }
+
+    if (isNaN(checkIn.getTime())) return null;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    checkIn.setHours(0, 0, 0, 0);
 
     const diffTime = checkIn.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : null;
+    return diffDays >= 0 ? diffDays : null;
   }, [latestBudget]);
 
-  const timelineEvents = useMemo(() => {
-    if (!latestBudget) return [];
-
-    const selectedItems = latestBudget.selectedItems || [];
-    const grouped: Record<string, any[]> = {};
-
-    selectedItems.forEach((item: any) => {
-      const cat = item.category || 'General Requirements';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(item);
-    });
-
-    const eventsList: any[] = [];
-    const entries = Object.entries(grouped);
-
-    entries.forEach(([catTitle, items], idx) => {
-      eventsList.push({
-        title: catTitle,
-        dayLabel:
-          idx === 0
-            ? 'Day 1 & General Setup'
-            : `Day ${Math.min(idx, latestBudget.days || 2)} Function`,
-        items,
-      });
-    });
-
-    return eventsList;
-  }, [latestBudget]);
-
-  // 1. Auth Listener
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -186,7 +202,7 @@ function UserProfileContent() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch User Budgets
+  // Fetch User Budgets (With Click Timestamp Sorting)
   const fetchUserBudgets = async (uid: string) => {
     try {
       const qBudgets = query(collection(db, 'saved_budgets'), where('userId', '==', uid));
@@ -198,7 +214,16 @@ function UserProfileContent() {
           ...docSnap.data(),
         }));
 
+        let clicks: Record<string, number> = {};
+        try {
+          clicks = JSON.parse(localStorage.getItem('wsc_budget_clicks') || '{}');
+        } catch (e) {}
+
         allDocs.sort((a: any, b: any) => {
+          const cA = clicks[a.docId] || 0;
+          const cB = clicks[b.docId] || 0;
+          if (cA !== cB) return cB - cA;
+
           const tA = a.createdAt
             ? typeof a.createdAt.toMillis === 'function'
               ? a.createdAt.toMillis()
@@ -289,7 +314,7 @@ function UserProfileContent() {
     }
   };
 
-  // Recommendations: Similar Room Count Resorts Grouped by Location
+  // Recommendations
   const fetchSimilarRecommendations = async (userBudgetsList: any[]) => {
     try {
       const snap = await getDocs(collection(db, 'resort_data'));
@@ -347,126 +372,7 @@ function UserProfileContent() {
     );
   }, [budgets, searchQuery]);
 
-  // LIVE SANDBOX SIMULATED GRAND TOTAL CALCULATOR (LIVE UPDATING)
-  const sandboxCalculatedGrandTotal = useMemo(() => {
-    if (!sandboxDoc || !sandboxDoc.quotes || sandboxDoc.quotes.length === 0) return 0;
-
-    // Current interactive slider values
-    const newGuests = Number(sandboxDoc.guests) || 150;
-    const newDays = Number(sandboxDoc.days) || 2;
-
-    // Fixed original values (locked when drawer opens)
-    const origGuests = Number(sandboxDoc.originalGuests) || 150;
-    const origDays = Number(sandboxDoc.originalDays) || 2;
-
-    // Live scaling ratios
-    const guestRatio = origGuests > 0 ? newGuests / origGuests : 1;
-    const dayRatio = origDays > 0 ? newDays / origDays : 1;
-
-    let cheapestTotal = Infinity;
-
-    sandboxDoc.quotes.forEach((q: any) => {
-      // 1. LIVE RESORT STAY COST (Scales dynamically with guest count & days)
-      const baseResortTotal = Number(q.resortTotal) || 0;
-      const newResortStayTotal = baseResortTotal * guestRatio * dayRatio;
-
-      // 2. LIVE PLANNER DECOR COST (Scales dynamically with checkboxes & sliders)
-      let newPlannerCost = 0;
-      const selectedItems = sandboxDoc.selectedItems || [];
-
-      const hasItemPrices = selectedItems.some(
-        (it: any) => Number(it.price || it.basePrice || it.rate || 0) > 0
-      );
-
-      if (hasItemPrices) {
-        // Calculate item-by-item dynamically using actual saved item prices & rules
-        selectedItems.forEach((item: any) => {
-          const qty = Number(item.qty) || 0;
-          if (qty <= 0) return;
-
-          const price = Number(item.price || item.basePrice || item.rate) || 0;
-          const ruleStr = (item.rule || item.pricingRule || 'flat').toLowerCase();
-
-          if (ruleStr.includes('per_person_day') || ruleStr.includes('person_day')) {
-            newPlannerCost += price * newGuests * newDays;
-          } else if (ruleStr.includes('per_person') || ruleStr.includes('person')) {
-            newPlannerCost += price * newGuests;
-          } else if ((ruleStr.includes('qty') || ruleStr.includes('unit')) && ruleStr.includes('day')) {
-            newPlannerCost += price * qty * newDays;
-          } else if (ruleStr.includes('qty') || ruleStr.includes('unit')) {
-            newPlannerCost += price * qty;
-          } else {
-            newPlannerCost += price;
-          }
-        });
-      } else {
-        // Fallback: Calculate based on active item count ratio + guest/day scaling
-        const basePlannerTotal = Number(q.plannerTotal) || 0;
-
-        const activeItemCount = selectedItems.filter((it: any) => (it.qty || 0) > 0).length;
-        const totalItemCount = selectedItems.length || 1;
-        const itemSelectionRatio = activeItemCount / totalItemCount;
-
-        newPlannerCost = basePlannerTotal * itemSelectionRatio * (0.4 * guestRatio + 0.6 * dayRatio);
-      }
-
-      const grandTotal = Math.round(newResortStayTotal + newPlannerCost);
-
-      if (grandTotal < cheapestTotal) {
-        cheapestTotal = grandTotal;
-      }
-    });
-
-    return cheapestTotal === Infinity ? 0 : cheapestTotal;
-  }, [sandboxDoc]);
-
-  // Sandbox Handlers
-  const handleItemQtyChange = (index: number, delta: number) => {
-    if (!sandboxDoc) return;
-    const updatedItems = [...sandboxDoc.selectedItems];
-    if (updatedItems[index]) {
-      const currentQty = updatedItems[index].qty || 0;
-      const newQty = Math.max(0, currentQty + delta);
-      updatedItems[index].qty = newQty;
-      setSandboxDoc({ ...sandboxDoc, selectedItems: updatedItems });
-    }
-  };
-
-  const handleItemToggle = (index: number, checked: boolean) => {
-    if (!sandboxDoc) return;
-    const updatedItems = [...sandboxDoc.selectedItems];
-    if (updatedItems[index]) {
-      updatedItems[index].qty = checked ? 1 : 0;
-      setSandboxDoc({ ...sandboxDoc, selectedItems: updatedItems });
-    }
-  };
-
-  const handleSaveSandbox = async () => {
-    if (!sandboxDoc || !sandboxDoc.docId) return;
-    setLoading(true);
-
-    try {
-      const bRef = doc(db, 'saved_budgets', sandboxDoc.docId);
-      await setDoc(
-        bRef,
-        {
-          guests: sandboxDoc.guests,
-          days: sandboxDoc.days,
-          selectedItems: sandboxDoc.selectedItems,
-        },
-        { merge: true }
-      );
-
-      if (currentUser) await fetchUserBudgets(currentUser.uid);
-      setSandboxDoc(null);
-    } catch (e) {
-      console.error('Error saving sandbox:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Login Handlers
+// Login Handlers (Configured for Real SMS on Firebase Blaze Plan)
   const handleSendLoginOTP = async () => {
     if (loginPhone.length < 10) {
       alert('Please enter a valid 10-digit phone number');
@@ -475,20 +381,39 @@ function UserProfileContent() {
     setLoginLoading(true);
 
     try {
-      let verifier = recaptchaVerifier;
-      if (!verifier) {
-        verifier = new RecaptchaVerifier(auth, 'login-recaptcha-container', {
-          size: 'invisible',
-        });
-        setRecaptchaVerifier(verifier);
+      // 1. Clear any previous reCAPTCHA instance to prevent stale tokens
+      if ((window as any).recaptchaVerifier) {
+        try {
+          (window as any).recaptchaVerifier.clear();
+        } catch (e) {}
+        (window as any).recaptchaVerifier = null;
       }
 
+      // 2. Initialize fresh invisible reCAPTCHA for real SMS verification
+      const verifier = new RecaptchaVerifier(auth, 'login-recaptcha-container', {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved, proceed to SMS
+        },
+      });
+      (window as any).recaptchaVerifier = verifier;
+
+      // 3. Render reCAPTCHA widget
+      await verifier.render();
+
+      // 4. Send real SMS via Firebase Blaze Plan
       const result = await signInWithPhoneNumber(auth, '+91' + loginPhone.trim(), verifier);
       setConfirmationResult(result);
       setOtpStep(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending OTP:', error);
-      alert('Error sending OTP. Please check your mobile number.');
+      if (error.code === 'auth/too-many-requests') {
+        alert('Firebase SMS rate limit reached for this specific number. Please try another phone number.');
+      } else if (error.code === 'auth/invalid-app-credential') {
+        alert('reCAPTCHA verification failed. Please refresh the page and try again.');
+      } else {
+        alert('Error sending OTP: ' + (error.message || 'Please check your mobile number.'));
+      }
     } finally {
       setLoginLoading(false);
     }
@@ -870,10 +795,10 @@ function UserProfileContent() {
                 </section>
               )}
 
-{/* PROMOTIONAL OFFER TILES BRACKET */}
-<section>
-  <PromoBracket guestCount={latestBudget?.guests || 150} onViewAll={handleOpenAllOffers} />
-</section>
+              {/* PROMOTIONAL OFFER TILES BRACKET */}
+              <section>
+                <PromoBracket guestCount={latestBudget?.guests || 150} onViewAll={handleOpenAllOffers} />
+              </section>
 
               {/* SIMILAR RESORTS TO FAVORITES */}
               {Object.keys(similarByLocation).length > 0 && (
@@ -956,7 +881,7 @@ function UserProfileContent() {
           {/* DASHBOARD CONTENT WHEN BUDGETS EXIST */}
           {budgets.length > 0 && (
             <div className="space-y-12">
-              {/* SHORTLISTED RESORTS (SAVED BUDGETS) */}
+              {/* SHORTLISTED RESORTS (SAVED BUDGETS CAROUSEL) */}
               <section id="quotes">
                 <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
                   <div>
@@ -984,7 +909,7 @@ function UserProfileContent() {
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="flex gap-6 overflow-x-auto pb-6 pt-2 hide-scrollbar snap-x scroll-smooth">
                       {filteredBudgets.slice(0, displayLimit).map((b) => {
                         const sortedQuotes = [...(b.quotes || [])].sort(
                           (x, y) => (x.grandTotal || 0) - (y.grandTotal || 0)
@@ -1006,7 +931,7 @@ function UserProfileContent() {
                         return (
                           <div
                             key={b.docId}
-                            className="bg-white border border-gray-200 rounded-3xl shadow-sm flex flex-col relative overflow-hidden group transition-all duration-300"
+                            className="shrink-0 w-[310px] sm:w-[350px] bg-white border border-gray-200 rounded-3xl shadow-sm flex flex-col relative overflow-hidden group transition-all duration-300 snap-start"
                           >
                             {/* Compare Checkbox */}
                             <label className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm px-2.5 py-1.5 rounded-xl text-xs font-bold text-gray-900 flex items-center gap-1.5 shadow-sm cursor-pointer border border-gray-200 z-10">
@@ -1027,9 +952,10 @@ function UserProfileContent() {
                               <i className="ph-bold ph-trash text-lg"></i>
                             </button>
 
-                            {/* Resort Image, Location & Complete Title */}
+                            {/* Resort Image & Title */}
                             <Link
                               href={`/resort/${b.resortId}`}
+                              onClick={() => recordBudgetClick(b.docId)}
                               className="relative h-60 w-full block bg-gray-100 overflow-hidden"
                             >
                               <img
@@ -1048,7 +974,7 @@ function UserProfileContent() {
                                 <span>{b.resortLocation || 'India'}</span>
                               </div>
 
-                              {/* Full Complete Resort Name */}
+                              {/* Resort Name */}
                               <div className="absolute bottom-0 left-0 w-full p-4 md:p-5 z-10">
                                 <h3 className="text-lg md:text-xl font-black text-white leading-tight break-words group-hover:underline drop-shadow-sm">
                                   {b.resortName || 'Luxury Resort'}
@@ -1094,6 +1020,7 @@ function UserProfileContent() {
                               {/* View Resort Link */}
                               <Link
                                 href={`/resort/${b.resortId}`}
+                                onClick={() => recordBudgetClick(b.docId)}
                                 className="w-full mb-4 bg-white hover:bg-gray-50 text-[#6B0D24] border border-[#6B0D24]/30 hover:border-[#6B0D24] font-bold py-2.5 rounded-xl text-xs transition flex justify-center items-center gap-1.5 shadow-sm"
                               >
                                 <i className="ph-bold ph-eye text-base"></i> View Resort
@@ -1110,7 +1037,10 @@ function UserProfileContent() {
                                   </p>
                                 </div>
                                 <button
-                                  onClick={() => setSelectedQuoteDoc(b)}
+                                  onClick={() => {
+                                    recordBudgetClick(b.docId);
+                                    setSelectedQuoteDoc(b);
+                                  }}
                                   className="bg-[#6B0D24] text-white hover:bg-[#6B0D24]/90 font-bold w-12 h-12 rounded-xl transition shadow-md flex items-center justify-center shrink-0"
                                 >
                                   <i className="ph-bold ph-arrow-right text-xl"></i>
@@ -1120,13 +1050,17 @@ function UserProfileContent() {
                               {/* Actions: Modify & Recalculate */}
                               <div className="flex gap-2 w-full">
                                 <button
-  onClick={() => setSandboxDoc({ ...b, originalGuests: b.guests, originalDays: b.days })}
-  className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-bold py-2.5 rounded-xl text-xs transition flex justify-center items-center gap-1.5 shadow-sm"
->
-  <i className="ph-bold ph-sliders text-base text-[#6B0D24]"></i> Modify
-</button>
+                                  onClick={() => {
+                                    recordBudgetClick(b.docId);
+                                    setSandboxDoc({ ...b });
+                                  }}
+                                  className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-bold py-2.5 rounded-xl text-xs transition flex justify-center items-center gap-1.5 shadow-sm"
+                                >
+                                  <i className="ph-bold ph-sliders text-base text-[#6B0D24]"></i> Modify
+                                </button>
                                 <Link
                                   href={`/resort/${b.resortId}?recalc=true`}
+                                  onClick={() => recordBudgetClick(b.docId)}
                                   className="flex-1 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-bold py-2.5 rounded-xl text-xs transition flex justify-center items-center gap-1.5 shadow-sm text-center"
                                 >
                                   <i className="ph-bold ph-arrows-clockwise text-base text-[#6B0D24]"></i> Recalculate
@@ -1139,12 +1073,12 @@ function UserProfileContent() {
                     </div>
 
                     {filteredBudgets.length > displayLimit && (
-                      <div className="mt-8 text-center">
+                      <div className="mt-6 text-center">
                         <button
-                          onClick={() => setDisplayLimit((prev) => prev + 10)}
-                          className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold py-3 px-8 rounded-xl shadow-sm transition inline-flex items-center gap-2"
+                          onClick={() => setDisplayLimit((prev) => prev + 8)}
+                          className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 font-bold py-3 px-8 rounded-xl shadow-sm transition inline-flex items-center gap-2 text-xs uppercase tracking-wider"
                         >
-                          Load More Resorts <i className="ph-bold ph-caret-down"></i>
+                          Load More Saved Resorts ({filteredBudgets.length - displayLimit} Remaining) <i className="ph-bold ph-caret-down"></i>
                         </button>
                       </div>
                     )}
@@ -1152,59 +1086,9 @@ function UserProfileContent() {
                 )}
               </section>
 
-              {/* WEDDING SCHEDULE TIMELINE SECTION */}
-              {latestBudget && timelineEvents.length > 0 && (
-                <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 mb-12">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-[#C5A059] block mb-1">
-                        Custom Event Plan
-                      </span>
-                      <h3 className="text-xl md:text-2xl font-black text-gray-900 flex items-center gap-2">
-                        <i className="ph-fill ph-calendar-check text-[#6B0D24]"></i>
-                        Wedding Schedule Timeline
-                      </h3>
-                    </div>
-                    <span className="bg-[#FAF6F0] text-[#6B0D24] border border-[#6B0D24]/20 px-3.5 py-1.5 rounded-full text-xs font-bold">
-                      {latestBudget.guests} Guests &bull; {latestBudget.days} Days &bull; {latestBudget.functions || 1} Events
-                    </span>
-                  </div>
-
-                  {/* Vertical Timeline */}
-                  <div className="relative border-l-2 border-[#6B0D24]/20 ml-3 md:ml-6 space-y-8 pl-6 md:pl-8 py-2">
-                    {timelineEvents.map((evt, idx) => (
-                      <div key={idx} className="relative group">
-                        <div className="absolute -left-[31px] md:-left-[41px] top-1.5 w-6 h-6 rounded-full bg-[#6B0D24] text-white flex items-center justify-center text-xs font-bold shadow-md ring-4 ring-white">
-                          {idx + 1}
-                        </div>
-
-                        <div className="bg-gray-50 border border-gray-100 p-5 rounded-2xl hover:border-[#6B0D24]/30 transition shadow-2xs">
-                          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1 mb-2">
-                            <h4 className="text-base font-black text-gray-900 flex items-center gap-2">
-                              <i className="ph-fill ph-sparkle text-[#C5A059]"></i>
-                              {evt.title}
-                            </h4>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                              {evt.dayLabel}
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {evt.items.map((item: any, itemIdx: number) => (
-                              <span
-                                key={itemIdx}
-                                className="bg-white border border-gray-200 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1"
-                              >
-                                <i className="ph-bold ph-check text-[#6B0D24] text-xs"></i>
-                                {item.name} {item.qty > 1 ? `x${item.qty}` : ''}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+              {/* CUSTOM WEDDING ITINERARY CREATOR */}
+              {budgets.length > 0 && (
+                <WeddingItineraryCreator budgets={budgets} userName={displayName} />
               )}
 
               {/* DYNAMIC RECOMMENDATIONS BY LOCATION */}
@@ -1340,16 +1224,16 @@ function UserProfileContent() {
         </main>
       )}
 
-{/* SANDBOX ESTIMATOR DRAWER */}
-{sandboxDoc && (
-  <SandboxDrawer
-    sandboxDoc={sandboxDoc}
-    onClose={() => setSandboxDoc(null)}
-    onSaveComplete={() => {
-      if (currentUser) fetchUserBudgets(currentUser.uid);
-    }}
-  />
-)}
+      {/* SANDBOX ESTIMATOR DRAWER */}
+      {sandboxDoc && (
+        <SandboxDrawer
+          sandboxDoc={sandboxDoc}
+          onClose={() => setSandboxDoc(null)}
+          onSaveComplete={() => {
+            if (currentUser) fetchUserBudgets(currentUser.uid);
+          }}
+        />
+      )}
 
       {/* COMPARE FLOATING BAR */}
       {compareSelections.length > 0 && (
@@ -1712,7 +1596,7 @@ function UserProfileContent() {
         </div>
       )}
 
-{/* ALL OFFERS MODAL */}
+      {/* ALL OFFERS MODAL */}
       <AllOffersModal
         isOpen={isAllOffersModalOpen}
         onClose={() => setIsAllOffersModalOpen(false)}
@@ -1720,7 +1604,6 @@ function UserProfileContent() {
         offers={allResortOffers}
       />
 
-      {/* User Consent */}
       {/* User Consent */}
       <ConsentPopup />
     </div>

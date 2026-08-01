@@ -40,3 +40,8 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
       <DynamicSortings sequenceFilter={10} onTileClick={handleTileClick} />
       {/* Manual Sequence 20 Sorting Categories */}
       <DynamicSortings sequenceFilter={20} onTileClick={handleTileClick} />
+
+
+git add .
+git commit -m "v3.0"
+git push

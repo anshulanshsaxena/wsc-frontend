@@ -138,6 +138,59 @@ function CompareResortsContent() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [pendingResortRedirect, setPendingResortRedirect] = useState<{ id: string; name: string } | null>(null);
 
+// Manual Save State
+  const [savedResortIds, setSavedResortIds] = useState<Set<string>>(new Set());
+  const [pendingSaveResort, setPendingSaveResort] = useState<any | null>(null);
+
+  // --- SAVE SINGLE RESORT BUDGET TO PROFILE ---
+  const saveSingleResortBudget = async (resort: any, user: User) => {
+    const guests = Number(sessionStorage.getItem('wedsaas_compare_guests')) || roundedGuests;
+    const days = Number(sessionStorage.getItem('wedsaas_compare_days')) || 1;
+    const checkInDate = sessionStorage.getItem('wedsaas_compare_checkin') || 'Not Selected';
+    const checkOutDate = sessionStorage.getItem('wedsaas_compare_checkout') || 'Not Selected';
+
+    const docId = `${user.uid}_cmp_${resort.id}_${Date.now()}`;
+
+    const budgetData = {
+      userId: user.uid,
+      resortId: resort.id,
+      resortName: resort.name,
+      resortLocation: resort.location,
+      resortImage: resort.image,
+      guests: guests,
+      days: days,
+      checkInDate: checkInDate,
+      checkOutDate: checkOutDate,
+      rooms: resort.rooms || 0,
+      functions: selectedEventNames.length || 1,
+      selectedItems: globalActiveItems, // Contains event categories
+      quotes: resort.allQuotes || [],
+      createdAt: new Date().toISOString(),
+    };
+
+    await setDoc(doc(db, "saved_budgets", docId), budgetData);
+    setSavedResortIds((prev) => new Set(prev).add(resort.id));
+  };
+
+  // Handler for "Save Budget" button click
+  const handleSaveBudgetClick = async (e: React.MouseEvent, resort: any) => {
+    e.stopPropagation(); // Prevents opening resort page on click
+
+    if (!currentUser) {
+      setPendingSaveResort(resort);
+      setAuthModalOpen(true);
+      return;
+    }
+
+    try {
+      await saveSingleResortBudget(resort, currentUser);
+      alert(`Saved ${resort.name} budget to your user profile!`);
+    } catch (err) {
+      console.error("Error saving budget:", err);
+      alert("Failed to save budget.");
+    }
+  };
+
   // 1. Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -374,9 +427,10 @@ function CompareResortsContent() {
 
       const eventsCount = selectedEventNames.length || 1;
 
-      // Collect active selected items
+     // Collect active selected items with Event Category Name
       const activeItems: any[] = [];
       masterCatalog.forEach((group) => {
+        const categoryName = group.name || 'General Requirements'; // Event Category
         const parseItems = (items: any[]) => {
           if (!Array.isArray(items)) return;
           items.forEach((item) => {
@@ -389,14 +443,19 @@ function CompareResortsContent() {
               const state = selections[id];
 
               if (state && (state.checked || state.qty > 0)) {
-                activeItems.push({ id, rule, qty: state.qty > 0 ? state.qty : 1, name });
+                activeItems.push({
+                  id,
+                  name,
+                  rule,
+                  qty: state.qty > 0 ? state.qty : 1,
+                  category: categoryName, // <-- FIX 1: Save Event Category Name
+                });
               }
             }
           });
         };
         parseItems(group.items);
       });
-
       setGlobalActiveItems(activeItems);
 
       const [resortsSnap, pricingSnap] = await Promise.all([
@@ -621,6 +680,7 @@ function CompareResortsContent() {
     }
   };
 
+  // --- REDIRECT ON RESORT CLICK (Without auto-saving all resorts) ---
   const logSaveAndRedirect = async (id: string, name: string) => {
     if (!currentUser) {
       setPendingResortRedirect({ id, name });
@@ -628,7 +688,7 @@ function CompareResortsContent() {
       return;
     }
 
-    setLoadingText("Calculating Budget For All Suitable Resorts");
+    setLoadingText("Opening Resort Page...");
     setLoading(true);
 
     try {
@@ -640,11 +700,11 @@ function CompareResortsContent() {
         timestamp: new Date()
       });
 
-      await saveAllComparedBudgets(currentUser.uid);
+      // Redirect directly to resort page (NO auto-saving all resorts)
       router.push(`/resort/${id}`);
     } catch (e) {
       router.push(`/resort/${id}`);
-    } finally { // <-- FIXED: Changed 'flex' to 'finally'
+    } finally {
       setLoading(false);
     }
   };
@@ -690,8 +750,13 @@ function CompareResortsContent() {
           lastLogin: new Date().toISOString()
         }, { merge: true });
 
-        if (pendingResortRedirect) {
-          await logSaveAndRedirect(pendingResortRedirect.id, pendingResortRedirect.name);
+        // If user clicked "Save Budget" before login
+        if (pendingSaveResort) {
+          await saveSingleResortBudget(pendingSaveResort, result.user);
+          setPendingSaveResort(null);
+          alert(`Saved ${pendingSaveResort.name} budget to your profile!`);
+        } else if (pendingResortRedirect) {
+          router.push(`/resort/${pendingResortRedirect.id}`);
         }
       }
     } catch (err) {
@@ -1224,9 +1289,9 @@ function CompareResortsContent() {
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 bg-white rounded-3xl border border-gray-100 shadow-sm gap-4">
               <div>
-                <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight mb-1">Your Curated Resort Quotes</h2>
+                <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight mb-1">Handpicked Resort Packages</h2>
                 <p className="text-gray-400 text-xs font-medium">
-                  Comparing {filteredResults.length} Suitable Resorts For {roundedGuests} Guests.
+                  Showing {filteredResults.length} Suitable Resorts For {roundedGuests} Guests.
                 </p>
               </div>
 
@@ -1411,9 +1476,27 @@ function CompareResortsContent() {
                         <h4 className="text-2xl md:text-3xl font-black text-[#6B0D24] mb-4 tracking-tight">
                           ₹{resort.totalBudget.toLocaleString('en-IN')}
                         </h4>
-                        <button className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition shadow-md flex justify-center items-center gap-2">
-                          View Property <i className="ph-bold ph-arrow-right"></i>
-                        </button>
+                        <button className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white py-3 rounded-2xl font-bold text-xs uppercase tracking-wider transition shadow-md flex justify-center items-center gap-2 mb-3.5">
+  View Property <i className="ph-bold ph-arrow-right"></i>
+</button>
+                        <button
+                        onClick={(e) => handleSaveBudgetClick(e, resort)}
+                        className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs ${
+                          savedResortIds.has(resort.id)
+                            ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
+                            : 'bg-white hover:bg-gray-50 text-[#6B0D24] border border-[#6B0D24]/30 hover:border-[#6B0D24]'
+                        }`}
+                      >
+                        {savedResortIds.has(resort.id) ? (
+                          <>
+                            <i className="ph-bold ph-check-circle text-base text-green-600"></i> Saved to Profile
+                          </>
+                        ) : (
+                          <>
+                            <i className="ph-bold ph-bookmark-simple text-base text-[#6B0D24]"></i> Shortlist
+                          </>
+                        )}
+                      </button>
                       </div>
                     </div>
                   );
