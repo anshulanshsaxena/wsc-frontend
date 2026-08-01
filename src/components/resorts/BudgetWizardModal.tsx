@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   PricingTier,
   CalendarRule,
@@ -44,12 +44,15 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
   const [selectedEventIndexes, setSelectedEventIndexes] = useState<number[]>([]);
   const [selections, setSelections] = useState<Record<string, { checked: boolean; qty: number }>>({});
   const [itemModalDoc, setItemModalDoc] = useState<{
-  title: string;
-  desc: string;
-  rule: string;
-  thumb: string;
-} | null>(null);
-  
+    title: string;
+    desc: string;
+    rule: string;
+    thumb: string;
+  } | null>(null);
+
+  // FIX 4: Ref for auto-scrolling to top on step transition
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       setStep(2);
@@ -59,9 +62,18 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
     }
   }, [isOpen]);
 
+  // FIX 4: Automatically scroll body container to top whenever step changes
+  useEffect(() => {
+    if (scrollBodyRef.current) {
+      scrollBodyRef.current.scrollTop = 0;
+    }
+  }, [step]);
+
   if (!isOpen) return null;
 
-  const selectedEvents = selectedEventIndexes.map((i) => masterCatalog[i]).filter(Boolean);
+  // FIX 3: Sort selected indices numerically so events ALWAYS follow database sequence order
+  const sortedSelectedEventIndexes = [...selectedEventIndexes].sort((a, b) => a - b);
+  const selectedEvents = sortedSelectedEventIndexes.map((i) => masterCatalog[i]).filter(Boolean);
   const totalSteps = 3 + (selectedEvents.length || 1);
 
   const toggleEventSelect = (index: number) => {
@@ -212,7 +224,7 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
           <button
             type="button"
             onClick={(e) => {
-              e.stopPropagation(); // Prevents card toggle on info click
+              e.stopPropagation();
               setItemModalDoc({ title: item.name, desc, rule: ruleStr, thumb });
             }}
             className="absolute top-2 right-2 bg-white/90 hover:bg-white text-[#6B0D24] w-6 h-6 rounded-full flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-30"
@@ -267,7 +279,7 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
                     id: sub.id,
                     name: sub.name || 'Selected Element',
                     qty: state.qty || 1,
-                    rule: sub.pricingRule || 'flat',
+                    rule: sub.pricingRule || sub.rule || 'flat',
                     category: group.name || 'GENERAL REQUIREMENTS',
                   });
                 }
@@ -320,7 +332,7 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
                 ? 'Step 2: Select Events'
                 : step === 3
                 ? 'Step 3: General Requirements'
-                : `Event ${step - 3} of ${selectedEvents.length}`}
+                : `Event ${step - 3} of ${selectedEvents.length}: ${selectedEvents[step - 4]?.name || ''}`}
             </p>
           </div>
         </div>
@@ -333,38 +345,46 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
         </button>
       </div>
 
-      {/* Scrollable Body */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full">
+      {/* Scrollable Body (with ref for auto-scrolling to top) */}
+      <div
+        ref={scrollBodyRef}
+        className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full flex flex-col"
+      >
+        {/* FIX 1: Step 2 Vertically Centered & Compacted */}
         {step === 2 && (
-          <div>
-            <h4 className="text-base md:text-lg font-black text-gray-900 mb-1">Select Your Events</h4>
-            <p className="text-xs text-gray-400 mb-5 font-medium">
+          <div className="my-auto max-w-2xl mx-auto w-full py-4">
+            <h4 className="text-base md:text-xl font-black text-gray-900 mb-1 text-center">
+              Select Your Planned Functions
+            </h4>
+            <p className="text-xs text-gray-400 mb-6 font-medium text-center">
               Choose functions you plan to host (minimum 1 required).
             </p>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {masterCatalog.map((group, idx) => {
                 if (idx === 0 || group.name?.toLowerCase().includes('general')) return null;
                 const isSelected = selectedEventIndexes.includes(idx);
                 return (
-                  <label
+                  /* FIX 2: Full Card Click Selection */
+                  <div
                     key={group.name + idx}
                     onClick={() => toggleEventSelect(idx)}
-                    className={`flex items-center gap-3 p-3.5 border rounded-2xl cursor-pointer transition bg-white ${
+                    className={`flex items-center gap-3.5 p-4 border rounded-2xl cursor-pointer transition-all select-none ${
                       isSelected
-                        ? 'border-[#6B0D24] bg-[#FAF6F0]'
-                        : 'border-gray-200 hover:border-[#6B0D24]'
+                        ? 'border-[#6B0D24] bg-[#FAF6F0] shadow-xs'
+                        : 'border-gray-200 hover:border-[#6B0D24] bg-white'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      readOnly
-                      className="w-5 h-5 text-[#6B0D24] rounded border-gray-300"
+                      onChange={() => {}}
+                      className="w-5 h-5 text-[#6B0D24] rounded border-gray-300 pointer-events-none"
                     />
                     <span className="font-bold text-gray-900 text-xs md:text-sm">
                       {group.name || 'Unnamed Event'}
                     </span>
-                  </label>
+                  </div>
                 );
               })}
             </div>
@@ -373,8 +393,12 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
 
         {step === 3 && (
           <div>
-            <h4 className="text-base md:text-lg font-black text-gray-900 mb-1">General Requirements</h4>
-            <p className="text-xs text-gray-400 mb-5 font-medium">Logistics, Sound, Stage & Base Decor requirements.</p>
+            <h4 className="text-base md:text-lg font-black text-gray-900 mb-1">
+              General Requirements
+            </h4>
+            <p className="text-xs text-gray-400 mb-5 font-medium">
+              Logistics, Sound, Stage & Base Decor requirements.
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {masterCatalog[0]?.items?.map((item: any) => {
                 const subItems = item.items || [item];
@@ -391,7 +415,9 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
                 <i className="ph-fill ph-tent text-[#C5A059]"></i>{' '}
                 {selectedEvents[step - 4]?.name || 'Event Setup'} ({step - 3} of {selectedEvents.length})
               </h4>
-              <p className="text-xs text-gray-400 mt-1 font-medium">Select custom elements for this specific function.</p>
+              <p className="text-xs text-gray-400 mt-1 font-medium">
+                Select custom elements for this specific function.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -407,7 +433,7 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
       </div>
 
       {/* Bottom Nav Bar */}
-      <div className="bg-white border-t border-gray-100 p-4 md:px-8 shrink-0 shadow-lg z-30 pb-safe">
+<div className="bg-white border-t border-gray-100 p-4 pb-8 md:pb-10 md:px-8 shrink-0 shadow-lg z-30">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <button
             type="button"
@@ -431,7 +457,8 @@ export const BudgetWizardModal: React.FC<BudgetWizardModalProps> = ({
           </button>
         </div>
       </div>
-{/* ITEM DESCRIPTION MODAL OVERLAY */}
+
+      {/* ITEM DESCRIPTION MODAL OVERLAY */}
       {itemModalDoc && (
         <div className="fixed inset-0 z-[100010] bg-gray-950/80 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">

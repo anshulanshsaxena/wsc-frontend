@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, use, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   doc,
@@ -49,16 +49,19 @@ import { SimilarOtherResorts } from '@/components/resorts/SimilarOtherResorts';
 import { ResortOffers } from '@/components/resorts/ResortOffers';
 import ConsentPopup from '@/components/modals/ConsentPopup';
 
-export default function ResortPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
-  const resortId = resolvedParams.id;
-   // PASTE THESE 2 LINES HERE:
-   const router = useRouter();
+function ResortPageContent({ resortId }: { resortId: string }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const isRecalcMode = searchParams.get('recalc') === 'true';
 
+  // Instant Route Prefetching for Profile Page
+  useEffect(() => {
+    router.prefetch('/user-profile?autoOpen=true');
+  }, [router]);
+
   // Page Data States
   const [loading, setLoading] = useState(true);
+  const [isSavingAndRedirecting, setIsSavingAndRedirecting] = useState(false);
   const [dbData, setDbData] = useState<Record<string, any>>({});
   const [schemaStructure, setSchemaStructure] = useState<any[]>([]);
   const [masterCatalog, setMasterCatalog] = useState<any[]>([]);
@@ -83,16 +86,22 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
   // Controls whether the inline Step 1 Calculator card is visible
   const [showStep1Inline, setShowStep1Inline] = useState(true);
 
-  // PASTE THIS useEffect BLOCK HERE:
+  // Handle Recalculate Mode (?recalc=true) AFTER page loading finishes
   useEffect(() => {
-    if (isRecalcMode) {
+    if (!loading && isRecalcMode) {
       setShowStep1Inline(true);
-      setTimeout(() => {
+
+      // Wait 400ms for DOM to render after loading becomes false
+      const timer = setTimeout(() => {
         const el = document.getElementById('resortBudgetCalculatorContainer');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 400);
+
+      return () => clearTimeout(timer);
     }
-  }, [isRecalcMode]);
+  }, [loading, isRecalcMode]);
 
   // Active Quote State
   const [activeQuote, setActiveQuote] = useState<QuoteCalculationResult | null>(null);
@@ -288,7 +297,6 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
               days: b.days || 2,
               quotes: sortedQuotes,
             });
-            // Hide inline calculator for returning users with saved budget (Matching Line 80)
             setShowStep1Inline(false);
           } else {
             setActiveSavedBudgetData(null);
@@ -331,7 +339,6 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
     }
   };
 
-  // Recalculate Button Action: Unhides Step 1 & Scrolls to it (Matching window.showWizardForRecalculate)
   const handleRecalculateClick = () => {
     setShowStep1Inline(true);
     setTimeout(() => {
@@ -349,6 +356,7 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
     setQuoteItems(items);
 
     if (currentUser) {
+      setIsSavingAndRedirecting(true);
       await saveFinalBudgetToDatabase(currentUser, result, items);
     } else {
       setQuickLoginMode('budget');
@@ -364,6 +372,8 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
     if (!calcResult.quotes || calcResult.quotes.length === 0) return;
 
     try {
+      setIsSavingAndRedirecting(true);
+
       // 1. DELETE ANY OLD HISTORICAL COPIES FOR THIS RESORT FIRST
       const existingQuery = query(
         collection(db, 'saved_budgets'),
@@ -396,6 +406,7 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
       router.push('/user-profile?autoOpen=true');
     } catch (err) {
       console.error('Error saving budget to database:', err);
+      setIsSavingAndRedirecting(false);
     }
   };
 
@@ -490,14 +501,14 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
         )}
 
         <ResortDetailsDynamic
-  dbData={dbData}
-  schemaStructure={schemaStructure}
-  resortName={currentResortName}
-  resortLocation={resortLocationName}
-  description={dbData.core_description || dbData.description}
-  guests={wizardParams.guests}
-  startingPrice={selectedDatePrice !== null ? selectedDatePrice : resortBasePrice}
-/>
+          dbData={dbData}
+          schemaStructure={schemaStructure}
+          resortName={currentResortName}
+          resortLocation={resortLocationName}
+          description={dbData.core_description || dbData.description}
+          guests={wizardParams.guests}
+          startingPrice={selectedDatePrice !== null ? selectedDatePrice : resortBasePrice}
+        />
 
         {/* OFFERS FOR THIS RESORT */}
         <ResortOffers resortId={resortId} coverImageUrl={coverImage} />
@@ -530,7 +541,7 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
         />
       </main>
 
-      {/* Sticky Bottom Bar with Saved Budget Preview & Recalc Icon */}
+      {/* Sticky Bottom Bar */}
       <StickyBottomBar
         resortName={currentResortName}
         isFavorited={isFavorited}
@@ -587,6 +598,35 @@ export default function ResortPage({ params }: { params: Promise<{ id: string }>
         scenes={tourScenesData}
         onClose={() => setTour360Open(false)}
       />
+
+      {/* FULL-SCREEN LOADER DURING SAVE & REDIRECT */}
+      {isSavingAndRedirecting && (
+        <div className="fixed inset-0 z-[200000] bg-gray-950/85 backdrop-blur-md flex flex-col items-center justify-center text-white text-center p-6 animate-fadeIn">
+          <div className="w-16 h-16 rounded-2xl bg-[#6B0D24] text-[#C5A059] flex items-center justify-center text-3xl mb-4 animate-bounce shadow-lg shadow-[#6B0D24]/30">
+            <i className="ph-fill ph-sparkle"></i>
+          </div>
+          <h3 className="text-xl md:text-2xl font-black mb-2 tracking-tight">Saving Your Custom Budget</h3>
+          <p className="text-gray-300 text-xs md:text-sm font-medium">Transferring quotes to your user profile dashboard...</p>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function ResortPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FAF6F0] flex flex-col items-center justify-center">
+          <i className="ph-bold ph-spinner-gap text-4xl text-[#6B0D24] animate-spin mb-3"></i>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+            Loading Resort...
+          </p>
+        </div>
+      }
+    >
+      <ResortPageContent resortId={resolvedParams.id} />
+    </Suspense>
   );
 }
