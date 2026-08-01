@@ -1274,11 +1274,11 @@ function CompareResortsContent() {
             )}
 
             <button
-              onClick={executeMathEngine}
-              className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2"
-            >
-              <i className="ph-fill ph-sparkle text-lg text-[#C5A059]"></i> COMPARE ALL RESORTS
-            </button>
+  onClick={() => executeMathEngine()}
+  className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white py-4 rounded-2xl font-black text-sm uppercase tracking-wider transition-all shadow-lg flex items-center justify-center gap-2"
+>
+  <i className="ph-fill ph-sparkle text-lg text-[#C5A059]"></i> COMPARE ALL RESORTS
+</button>
           </div>
         )}
 
