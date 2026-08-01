@@ -50,6 +50,22 @@ function UserProfileContent() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [resendTimer, setResendTimer] = useState<number>(40);
+
+  // 40-Second Resend OTP Countdown Timer
+  useEffect(() => {
+    let interval: any = null;
+    if (otpStep && resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (!otpStep) {
+      setResendTimer(40);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [otpStep, resendTimer]);
 
   // Saved Budgets Data States
   const [budgets, setBudgets] = useState<any[]>([]);
@@ -372,7 +388,7 @@ function UserProfileContent() {
     );
   }, [budgets, searchQuery]);
 
-// Login Handlers (Configured for Real SMS on Firebase Blaze Plan)
+  // Login Handlers (Permanent Fix for Google reCAPTCHA Registry)
   const handleSendLoginOTP = async () => {
     if (loginPhone.length < 10) {
       alert('Please enter a valid 10-digit phone number');
@@ -381,7 +397,34 @@ function UserProfileContent() {
     setLoginLoading(true);
 
     try {
-      // 1. Clear any previous reCAPTCHA instance to prevent stale tokens
+      // 1. Get existing verifier or create a fresh one with a new DOM node
+      let verifier = (window as any).recaptchaVerifier;
+
+      if (!verifier) {
+        // Replace DOM node to bypass Google reCAPTCHA internal memory registry
+        const oldContainer = document.getElementById('login-recaptcha-container');
+        if (oldContainer && oldContainer.parentNode) {
+          const newContainer = document.createElement('div');
+          newContainer.id = 'login-recaptcha-container';
+          oldContainer.parentNode.replaceChild(newContainer, oldContainer);
+        }
+
+        verifier = new RecaptchaVerifier(auth, 'login-recaptcha-container', {
+          size: 'invisible',
+          callback: () => {},
+        });
+        (window as any).recaptchaVerifier = verifier;
+      }
+
+      // 2. Send OTP
+      const result = await signInWithPhoneNumber(auth, '+91' + loginPhone.trim(), verifier);
+      setConfirmationResult(result);
+      setResendTimer(40);
+      setOtpStep(true);
+    } catch (error: any) {
+      console.error('Error sending OTP:', error);
+
+      // Clear verifier instance on error so next attempt starts fresh
       if ((window as any).recaptchaVerifier) {
         try {
           (window as any).recaptchaVerifier.clear();
@@ -389,28 +432,8 @@ function UserProfileContent() {
         (window as any).recaptchaVerifier = null;
       }
 
-      // 2. Initialize fresh invisible reCAPTCHA for real SMS verification
-      const verifier = new RecaptchaVerifier(auth, 'login-recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          // reCAPTCHA solved, proceed to SMS
-        },
-      });
-      (window as any).recaptchaVerifier = verifier;
-
-      // 3. Render reCAPTCHA widget
-      await verifier.render();
-
-      // 4. Send real SMS via Firebase Blaze Plan
-      const result = await signInWithPhoneNumber(auth, '+91' + loginPhone.trim(), verifier);
-      setConfirmationResult(result);
-      setOtpStep(true);
-    } catch (error: any) {
-      console.error('Error sending OTP:', error);
       if (error.code === 'auth/too-many-requests') {
-        alert('Firebase SMS rate limit reached for this specific number. Please try another phone number.');
-      } else if (error.code === 'auth/invalid-app-credential') {
-        alert('reCAPTCHA verification failed. Please refresh the page and try again.');
+        alert('Firebase SMS rate limit reached for this number. Please try another phone number or wait a few minutes.');
       } else {
         alert('Error sending OTP: ' + (error.message || 'Please check your mobile number.'));
       }
@@ -445,6 +468,19 @@ function UserProfileContent() {
           },
           { merge: true }
         );
+
+        // RESET ALL LOGIN OVERLAY STATES UPON SUCCESSFUL LOGIN
+        setLoginName('');
+        setLoginPhone('');
+        setLoginOtp('');
+        setOtpStep(false);
+        setConfirmationResult(null);
+        if ((window as any).recaptchaVerifier) {
+          try {
+            (window as any).recaptchaVerifier.clear();
+          } catch (e) {}
+          (window as any).recaptchaVerifier = null;
+        }
       }
     } catch (error) {
       console.error('OTP Verification Error:', error);
@@ -458,6 +494,18 @@ function UserProfileContent() {
     setLoading(true);
     try {
       await signOut(auth);
+      // Reset all login states so the user gets a clean login screen
+      setLoginName('');
+      setLoginPhone('');
+      setLoginOtp('');
+      setOtpStep(false);
+      setConfirmationResult(null);
+      if ((window as any).recaptchaVerifier) {
+        try {
+          (window as any).recaptchaVerifier.clear();
+        } catch (e) {}
+        (window as any).recaptchaVerifier = null;
+      }
       router.push('/');
     } catch (e) {
       console.error('Logout error:', e);
@@ -598,18 +646,41 @@ function UserProfileContent() {
                   />
                 </div>
                 <button
-                  onClick={handleVerifyLoginOTP}
-                  disabled={loginLoading}
-                  className="w-full bg-[#6B0D24] text-white font-black py-4 rounded-2xl hover:bg-[#6B0D24]/90 transition-all shadow-lg disabled:opacity-70"
-                >
-                  {loginLoading ? 'Verifying...' : 'Verify & Continue'}
-                </button>
-                <button
-                  onClick={() => setOtpStep(false)}
-                  className="w-full text-gray-400 font-bold text-sm mt-2"
-                >
-                  Change Number
-                </button>
+    onClick={handleVerifyLoginOTP}
+    disabled={loginLoading}
+    className="w-full bg-[#6B0D24] text-white font-black py-4 rounded-2xl hover:bg-[#6B0D24]/90 transition-all shadow-lg disabled:opacity-70 mb-2"
+  >
+    {loginLoading ? 'Verifying...' : 'Verify & Continue'}
+  </button>
+
+  <div className="flex justify-between items-center text-xs font-bold pt-2">
+    {/* Resend OTP Button with 40s Timer */}
+    <button
+      type="button"
+      onClick={() => {
+        if (resendTimer === 0) {
+          setResendTimer(40);
+          handleSendLoginOTP();
+        }
+      }}
+      disabled={resendTimer > 0 || loginLoading}
+      className="text-[#6B0D24] hover:underline disabled:text-gray-400 disabled:no-underline"
+    >
+      {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
+    </button>
+
+    {/* Change Number Button */}
+    <button
+      type="button"
+      onClick={() => {
+        setOtpStep(false);
+        setLoginOtp('');
+      }}
+      className="text-gray-400 hover:text-gray-600"
+    >
+      Change Number
+    </button>
+  </div>
               </div>
             )}
 
