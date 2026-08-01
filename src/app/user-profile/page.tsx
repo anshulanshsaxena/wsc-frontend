@@ -578,39 +578,52 @@ function UserProfileContent() {
       {/* Navbar */}
       <Navbar />
 
-      {/* LOGGED OUT LOGIN OVERLAY */}
+     {/* LOGGED OUT LOGIN OVERLAY WITH LUXURY BACKGROUND IMAGE */}
       {!currentUser && (
-        <div className="fixed top-16 md:top-20 inset-x-0 bottom-0 z-[10000] bg-white flex flex-col items-center justify-center p-6">
-          <div className="w-full max-w-md">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-[#6B0D24]/10 text-[#6B0D24] rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <div className="fixed top-16 md:top-20 inset-x-0 bottom-0 z-[10000] flex flex-col items-center justify-center p-6 overflow-hidden">
+          {/* Background Cover Image */}
+          <img
+            src="https://firebasestorage.googleapis.com/v0/b/saas-c8ee9-c4tkm-india/o/cover%20image%20login%20screen.jpeg?alt=media&token=ef78069e-5263-44aa-a0b1-a5e25fbea24a"
+            alt="Luxury Destination Wedding"
+            className="absolute inset-0 w-full h-full object-cover scale-105"
+          />
+
+          {/* Dark Backdrop Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-900/75 to-gray-950/80 backdrop-blur-xs z-2" />
+
+          {/* Central Glassmorphism Login Card */}
+          <div className="relative z-20 w-full max-w-md bg-white/95 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-white/20">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-[#6B0D24]/10 text-[#6B0D24] rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-xs">
                 <i className="ph-fill ph-user-circle text-4xl"></i>
               </div>
-              <h2 className="text-2xl font-black text-gray-900">Welcome Back</h2>
-              <p className="text-gray-500 font-medium">Log in to view your saved budgets & quotes</p>
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight">Welcome Back</h2>
+              <p className="text-gray-500 font-medium text-xs mt-1">
+                Log in to view your saved budgets, quotes & itinerary
+              </p>
             </div>
 
             {!otpStep ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
                     Full Name
                   </label>
                   <input
                     type="text"
                     value={loginName}
                     onChange={(e) => setLoginName(e.target.value)}
-                    placeholder="Your Name"
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 px-4 font-bold outline-none focus:border-[#6B0D24] transition-all"
+                    placeholder="Your Full Name"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3.5 px-4 font-bold text-sm outline-none focus:border-[#6B0D24] transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">
                     Mobile Number
                   </label>
                   <div className="relative">
-                    <span className="absolute inset-y-0 left-4 flex items-center font-bold text-gray-400">
+                    <span className="absolute inset-y-0 left-4 flex items-center font-black text-gray-500 text-sm">
                       +91
                     </span>
                     <input
@@ -618,7 +631,7 @@ function UserProfileContent() {
                       value={loginPhone}
                       onChange={(e) => setLoginPhone(e.target.value)}
                       placeholder="9999999999"
-                      className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 pl-14 pr-4 font-bold outline-none focus:border-[#6B0D24] transition-all"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3.5 pl-14 pr-4 font-bold text-sm outline-none focus:border-[#6B0D24] transition-all"
                     />
                   </div>
                 </div>
@@ -626,7 +639,7 @@ function UserProfileContent() {
                 <button
                   onClick={handleSendLoginOTP}
                   disabled={loginLoading}
-                  className="w-full bg-gray-900 text-white font-black py-4 rounded-2xl hover:bg-[#6B0D24] transition-all shadow-lg disabled:opacity-70"
+                  className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white font-black py-4 rounded-2xl transition-all shadow-lg text-xs uppercase tracking-wider disabled:opacity-70 mt-2"
                 >
                   {loginLoading ? 'Sending OTP...' : 'Send OTP'}
                 </button>
@@ -634,53 +647,54 @@ function UserProfileContent() {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 text-center">
-                    Enter 6-Digit OTP
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">
+                    Enter 6-Digit Verification OTP
                   </label>
                   <input
                     type="number"
                     value={loginOtp}
                     onChange={(e) => setLoginOtp(e.target.value)}
                     placeholder="------"
-                    className="w-full bg-gray-50 border-2 border-gray-100 rounded-2xl py-4 text-center text-2xl font-black tracking-[1em] outline-none focus:border-[#6B0D24] transition-all"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-3.5 text-center text-2xl font-black tracking-[0.6em] outline-none focus:border-[#6B0D24] transition-all"
                   />
                 </div>
+
                 <button
-    onClick={handleVerifyLoginOTP}
-    disabled={loginLoading}
-    className="w-full bg-[#6B0D24] text-white font-black py-4 rounded-2xl hover:bg-[#6B0D24]/90 transition-all shadow-lg disabled:opacity-70 mb-2"
-  >
-    {loginLoading ? 'Verifying...' : 'Verify & Continue'}
-  </button>
+                  onClick={handleVerifyLoginOTP}
+                  disabled={loginLoading}
+                  className="w-full bg-[#6B0D24] hover:bg-[#520a1a] text-white font-black py-4 rounded-2xl transition-all shadow-lg text-xs uppercase tracking-wider disabled:opacity-70"
+                >
+                  {loginLoading ? 'Verifying...' : 'Verify & Continue'}
+                </button>
 
-  <div className="flex justify-between items-center text-xs font-bold pt-2">
-    {/* Resend OTP Button with 40s Timer */}
-    <button
-      type="button"
-      onClick={() => {
-        if (resendTimer === 0) {
-          setResendTimer(40);
-          handleSendLoginOTP();
-        }
-      }}
-      disabled={resendTimer > 0 || loginLoading}
-      className="text-[#6B0D24] hover:underline disabled:text-gray-400 disabled:no-underline"
-    >
-      {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
-    </button>
+                <div className="flex justify-between items-center text-xs font-bold pt-2">
+                  {/* Resend OTP Button with 40s Timer */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (resendTimer === 0) {
+                        setResendTimer(40);
+                        handleSendLoginOTP();
+                      }
+                    }}
+                    disabled={resendTimer > 0 || loginLoading}
+                    className="text-[#6B0D24] hover:underline disabled:text-gray-400 disabled:no-underline"
+                  >
+                    {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
+                  </button>
 
-    {/* Change Number Button */}
-    <button
-      type="button"
-      onClick={() => {
-        setOtpStep(false);
-        setLoginOtp('');
-      }}
-      className="text-gray-400 hover:text-gray-600"
-    >
-      Change Number
-    </button>
-  </div>
+                  {/* Change Number Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpStep(false);
+                      setLoginOtp('');
+                    }}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    Change Number
+                  </button>
+                </div>
               </div>
             )}
 

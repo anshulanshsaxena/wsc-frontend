@@ -421,7 +421,7 @@ function ResortPageContent({ resortId }: { resortId: string }) {
       <div className="min-h-screen bg-[#FAF6F0] flex flex-col items-center justify-center">
         <i className="ph-bold ph-spinner-gap text-4xl text-[#6B0D24] animate-spin mb-3"></i>
         <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-          Curating Luxury...
+          Loading Resort...
         </p>
       </div>
     );

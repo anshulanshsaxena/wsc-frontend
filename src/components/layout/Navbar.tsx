@@ -4,23 +4,40 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { extractCoverImage } from '@/lib/pricing';
+import FavoritesModal, { FavoriteItem } from '@/components/modals/FavoritesModal';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userName, setUserName] = useState('');
+  
+  // Synchronous initial state from localStorage (0ms delay, no flash)
+  const [userName, setUserName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('wsc_user_name') || '';
+    }
+    return '';
+  });
+
+  const [userFavorites, setUserFavorites] = useState<FavoriteItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('wsc_user_favorites');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {}
+      }
+    }
+    return [];
+  });
+
+  const [favoritesModalOpen, setFavoritesModalOpen] = useState(false);
   const pathname = usePathname();
 
-  // Read cached name immediately on mount to prevent "User" text flashing
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const cached = localStorage.getItem('wsc_user_name');
-      if (cached) setUserName(cached);
-    }
-  }, []);
-
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -38,19 +55,64 @@ export default function Navbar() {
           if (fetchedName) {
             setUserName(fetchedName);
             localStorage.setItem('wsc_user_name', fetchedName);
-          } else {
-            setUserName('');
-            localStorage.removeItem('wsc_user_name');
           }
         } catch (e) {}
       } else {
         setUserName('');
+        setUserFavorites([]);
         localStorage.removeItem('wsc_user_name');
+        localStorage.removeItem('wsc_user_favorites');
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Fetch User Favorites from Firestore & Keep Cache Updated
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchFavorites = async () => {
+      try {
+        const qFavs = query(collection(db, 'favorites'), where('userId', '==', currentUser.uid));
+        const snapFavs = await getDocs(qFavs);
+
+        const promises = snapFavs.docs.map(async (docSnap) => {
+          const f = docSnap.data();
+          if (!f.resortId) return null;
+          try {
+            const resDoc = await getDoc(doc(db, 'resort_data', f.resortId));
+            if (resDoc.exists()) {
+              const rd = resDoc.data();
+              return {
+                id: f.resortId,
+                name: rd._recordName || rd.core_name || f.resortName || 'Luxury Resort',
+                location: rd.core_location || 'India',
+                rooms: rd.core_rooms || rd.rooms || 0,
+                image: extractCoverImage(rd),
+              };
+            }
+          } catch (e) {}
+          return null;
+        });
+
+        const results = await Promise.all(promises);
+        const validFavs = results.filter(Boolean) as FavoriteItem[];
+
+        setUserFavorites(validFavs);
+
+        if (validFavs.length > 0) {
+          localStorage.setItem('wsc_user_favorites', JSON.stringify(validFavs));
+        } else {
+          localStorage.removeItem('wsc_user_favorites');
+        }
+      } catch (e) {
+        console.error('Error fetching favorites for navbar:', e);
+      }
+    };
+
+    fetchFavorites();
+  }, [currentUser]);
 
   useEffect(() => {
     if (mobileMenuOpen) {
@@ -66,6 +128,9 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       localStorage.removeItem('wsc_user_name');
+      localStorage.removeItem('wsc_user_favorites');
+      setUserName('');
+      setUserFavorites([]);
       await signOut(auth);
     } catch (e) {
       console.error(e);
@@ -116,11 +181,23 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* User Auth Info & CTA Button */}
+          {/* User Auth Info, Favorites Button & CTA Button */}
           <div className="hidden md:flex items-center gap-4">
-            {currentUser ? (
+            {/* FAVORITES BUTTON (Renders on Frame 0 - 0ms delay, no reloading/flashing) */}
+            {userFavorites.length > 0 && (
+              <button
+                onClick={() => setFavoritesModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-bold text-[#6B0D24] bg-[#FAF6F0] hover:bg-[#6B0D24] hover:text-white border border-[#6B0D24]/20 px-3.5 py-2 rounded-full transition-all shadow-2xs group cursor-pointer"
+                title="View Favorite Resorts"
+              >
+                <i className="ph-fill ph-heart text-sm text-[#6B0D24] group-hover:text-white transition-colors"></i>
+                <span>Favorites ({userFavorites.length})</span>
+              </button>
+            )}
+
+            {currentUser || userName ? (
               <div className="flex items-center gap-3">
-                {/* Name Badge rendered ONLY if userName exists and is not empty */}
+                {/* Name Badge */}
                 {userName && userName.trim() !== '' && (
                   <span className="text-xs font-black uppercase tracking-wider text-[#6B0D24] bg-[#6B0D24]/5 px-3 py-1.5 rounded-xl border border-[#6B0D24]/10">
                     {userName}
@@ -150,14 +227,26 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* Mobile Hamburger Button */}
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden text-gray-900 p-2 focus:outline-none"
-            aria-label="Open Mobile Menu"
-          >
-            <i className="ph ph-list text-3xl"></i>
-          </button>
+          {/* Mobile Hamburger & Favorites Buttons */}
+          <div className="flex items-center gap-2 md:hidden">
+            {userFavorites.length > 0 && (
+              <button
+                onClick={() => setFavoritesModalOpen(true)}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-[#FAF6F0] text-[#6B0D24] border border-[#6B0D24]/20"
+                title="View Favorites"
+              >
+                <i className="ph-fill ph-heart text-base"></i>
+              </button>
+            )}
+
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="text-gray-900 p-2 focus:outline-none"
+              aria-label="Open Mobile Menu"
+            >
+              <i className="ph ph-list text-3xl"></i>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -192,7 +281,7 @@ export default function Navbar() {
         </div>
 
         {/* Mobile User Header */}
-        {currentUser && userName && userName.trim() !== '' && (
+        {(currentUser || userName) && userName.trim() !== '' && (
           <div className="flex flex-col gap-1 pb-4 mb-2 border-b border-gray-100">
             <span className="text-[10px] font-black uppercase tracking-widest text-[#C5A059]">
               Logged In As
@@ -252,6 +341,18 @@ export default function Navbar() {
 
         {/* Actions */}
         <div className="mt-6 flex flex-col gap-2">
+          {userFavorites.length > 0 && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setFavoritesModalOpen(true);
+              }}
+              className="bg-[#FAF6F0] text-[#6B0D24] border border-[#6B0D24]/20 w-full py-3 rounded-xl font-bold text-center block text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5"
+            >
+              <i className="ph-fill ph-heart text-sm"></i> View Favorites ({userFavorites.length})
+            </button>
+          )}
+
           <Link
             href="/compare-resorts"
             onClick={() => setMobileMenuOpen(false)}
@@ -260,7 +361,7 @@ export default function Navbar() {
             Get an Instant Quote
           </Link>
 
-          {currentUser && (
+          {(currentUser || userName) && (
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
@@ -273,6 +374,13 @@ export default function Navbar() {
           )}
         </div>
       </div>
+
+      {/* FAVORITES MODAL */}
+      <FavoritesModal
+        isOpen={favoritesModalOpen}
+        onClose={() => setFavoritesModalOpen(false)}
+        favorites={userFavorites}
+      />
     </>
   );
 }

@@ -80,8 +80,8 @@ function CompareResortsContent() {
   // --- WIZARD STEP & ROUTING STATE ---
   const [step, setStep] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(false);
-  const [loadingText, setLoadingText] = useState<string>("Running AI Cost Engine...");
-  const [loadingSubtext, setLoadingSubtext] = useState<string>("Calculating Base Decor, Tiers, Calendar Discounts, and Planner Costs across all resorts.");
+  const [loadingText, setLoadingText] = useState<string>("Finding Resort...");
+  const [loadingSubtext, setLoadingSubtext] = useState<string>("Calculating Budget....");
 
   // --- STEP 1: BASICS STATE ---
   const [guestCountInput, setGuestCountInput] = useState<number>(150);
@@ -138,16 +138,26 @@ function CompareResortsContent() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [pendingResortRedirect, setPendingResortRedirect] = useState<{ id: string; name: string } | null>(null);
 
-// Manual Save State
+  // Manual Save State
   const [savedResortIds, setSavedResortIds] = useState<Set<string>>(new Set());
   const [pendingSaveResort, setPendingSaveResort] = useState<any | null>(null);
 
-  // --- SAVE SINGLE RESORT BUDGET TO PROFILE ---
+  // --- SAVE SINGLE RESORT BUDGET TO PROFILE (EXACT DATA MATCHING COMPARE-RESORT.HTML) ---
   const saveSingleResortBudget = async (resort: any, user: User) => {
     const guests = Number(sessionStorage.getItem('wedsaas_compare_guests')) || roundedGuests;
     const days = Number(sessionStorage.getItem('wedsaas_compare_days')) || 1;
     const checkInDate = sessionStorage.getItem('wedsaas_compare_checkin') || 'Not Selected';
     const checkOutDate = sessionStorage.getItem('wedsaas_compare_checkout') || 'Not Selected';
+
+    // Synchronously read items saved in sessionStorage to ensure selectedItems is never empty []
+    let itemsToSave = globalActiveItems;
+    try {
+      const storedActive = sessionStorage.getItem('wedsaas_compare_active_items');
+      if (storedActive) {
+        const parsed = JSON.parse(storedActive);
+        if (Array.isArray(parsed) && parsed.length > 0) itemsToSave = parsed;
+      }
+    } catch (e) {}
 
     const docId = `${user.uid}_cmp_${resort.id}_${Date.now()}`;
 
@@ -163,7 +173,7 @@ function CompareResortsContent() {
       checkOutDate: checkOutDate,
       rooms: resort.rooms || 0,
       functions: selectedEventNames.length || 1,
-      selectedItems: globalActiveItems, // Contains event categories
+      selectedItems: itemsToSave,
       quotes: resort.allQuotes || [],
       createdAt: new Date().toISOString(),
     };
@@ -174,7 +184,7 @@ function CompareResortsContent() {
 
   // Handler for "Save Budget" button click
   const handleSaveBudgetClick = async (e: React.MouseEvent, resort: any) => {
-    e.stopPropagation(); // Prevents opening resort page on click
+    e.stopPropagation();
 
     if (!currentUser) {
       setPendingSaveResort(resort);
@@ -221,6 +231,13 @@ function CompareResortsContent() {
           const parsedResults = JSON.parse(savedResults);
           if (Array.isArray(parsedResults) && parsedResults.length > 0) {
             setResults(parsedResults);
+            
+            // Restore active items from session storage
+            const storedActive = sessionStorage.getItem('wedsaas_compare_active_items');
+            if (storedActive) {
+              try { setGlobalActiveItems(JSON.parse(storedActive)); } catch (e) {}
+            }
+
             setStep(6); // Results view
           }
         } catch (e) {}
@@ -230,7 +247,7 @@ function CompareResortsContent() {
     }
   };
 
-  // Auto-rounding guest count helper
+  // Auto-rounding guest count helper (Matches compare-resort.html getRoundedGuests)
   const roundedGuests = useMemo(() => {
     let raw = Number(guestCountInput) || 150;
     let remainder = raw % 10;
@@ -261,7 +278,7 @@ function CompareResortsContent() {
     });
   };
 
-  // --- CALENDAR OVERLAY ENGINE (FIXED ISSUE 1) ---
+  // --- CALENDAR OVERLAY ENGINE ---
   const toggleCalendar = (mode: 'in' | 'out', explicitCheckIn?: string, e?: React.MouseEvent) => {
     const activeCheckIn = explicitCheckIn !== undefined ? explicitCheckIn : checkInRaw;
 
@@ -322,7 +339,6 @@ function CompareResortsContent() {
       }
       setCalendarOpen(false);
 
-      // Automatically transition to Check-out picker with explicit checkIn value
       setTimeout(() => {
         toggleCalendar('out', formattedRaw);
       }, 150);
@@ -333,7 +349,7 @@ function CompareResortsContent() {
     }
   };
 
-  // --- FAST-TRACK PRESELECTED ITEMS APPLIER ---
+ // --- FAST-TRACK PRESELECTED ITEMS APPLIER (FILTERED BY USER SELECTED EVENTS) ---
   const applyPreselectedConfigItems = () => {
     let targetConfigMap = new Map<string, number>();
     const storedConfig = typeof window !== 'undefined' ? localStorage.getItem('wsc_custom_preselected_items') : null;
@@ -364,6 +380,14 @@ function CompareResortsContent() {
     const newSelections: Record<string, { checked: boolean; qty: number }> = {};
 
     masterCatalog.forEach((group) => {
+      const groupType = (group.type || '').toLowerCase();
+      const groupName = group.name || '';
+
+      // FIX: Only parse preselected items if the event was selected by the user in Step 2
+      if (groupType === 'event' && !selectedEventNames.includes(groupName)) {
+        return; // Skip unselected events
+      }
+
       const parseItems = (items: any[]) => {
         if (!Array.isArray(items)) return;
         items.forEach((item) => {
@@ -387,22 +411,25 @@ function CompareResortsContent() {
     });
 
     setSelections(newSelections);
+    return newSelections;
   };
 
   const selectPackageMode = (mode: 'recommended' | 'custom') => {
     if (mode === 'recommended') {
-      applyPreselectedConfigItems();
-      executeMathEngine();
+      const preselected = applyPreselectedConfigItems();
+      executeMathEngine(preselected);
     } else {
       setStep(4);
     }
   };
 
   // --- EXECUTE AI COST ENGINE (Calculations) ---
-  const executeMathEngine = async () => {
-    setLoadingText("Running AI Cost Engine...");
-    setLoadingSubtext("Calculating Base Decor, Tiers, Calendar Discounts, and Planner Costs across all resorts.");
+  const executeMathEngine = async (overrideSelections?: Record<string, { checked: boolean; qty: number }>) => {
+    setLoadingText("Finding Resort...");
+    setLoadingSubtext("Calculating Budget....");
     setLoading(true);
+
+    const activeSelections = overrideSelections || selections;
 
     try {
       let imageFieldId: string | null = null;
@@ -416,21 +443,28 @@ function CompareResortsContent() {
       findImageField(resortSchemaStructure);
 
       const guests = roundedGuests;
-      const checkIn = new Date(checkInRaw);
-      const checkOut = new Date(checkOutRaw);
-      let daysDiff = 1;
 
-      if (!isNaN(checkIn.getTime()) && !isNaN(checkOut.getTime()) && checkOut > checkIn) {
+      // Safe Date Parsing
+      let checkIn = new Date(checkInRaw + "T00:00:00");
+      let checkOut = new Date(checkOutRaw + "T00:00:00");
+      if (isNaN(checkIn.getTime())) checkIn = new Date();
+      if (isNaN(checkOut.getTime())) {
+        checkOut = new Date(checkIn);
+        checkOut.setDate(checkOut.getDate() + 1);
+      }
+
+      let daysDiff = 1;
+      if (checkOut > checkIn) {
         daysDiff = Math.round((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
       }
       if (daysDiff < 1) daysDiff = 1;
 
       const eventsCount = selectedEventNames.length || 1;
 
-     // Collect active selected items with Event Category Name
+      // Collect active selected items WITH Category
       const activeItems: any[] = [];
       masterCatalog.forEach((group) => {
-        const categoryName = group.name || 'General Requirements'; // Event Category
+        const categoryName = group.name || 'General Requirements';
         const parseItems = (items: any[]) => {
           if (!Array.isArray(items)) return;
           items.forEach((item) => {
@@ -440,7 +474,7 @@ function CompareResortsContent() {
               const id = item.id;
               const rule = (item.pricingRule || item.rule || 'flat').toLowerCase();
               const name = item.name || 'Custom Element';
-              const state = selections[id];
+              const state = activeSelections[id];
 
               if (state && (state.checked || state.qty > 0)) {
                 activeItems.push({
@@ -448,7 +482,7 @@ function CompareResortsContent() {
                   name,
                   rule,
                   qty: state.qty > 0 ? state.qty : 1,
-                  category: categoryName, // <-- FIX 1: Save Event Category Name
+                  category: categoryName,
                 });
               }
             }
@@ -456,7 +490,9 @@ function CompareResortsContent() {
         };
         parseItems(group.items);
       });
+
       setGlobalActiveItems(activeItems);
+      sessionStorage.setItem('wedsaas_compare_active_items', JSON.stringify(activeItems));
 
       const [resortsSnap, pricingSnap] = await Promise.all([
         getDocs(collection(db, "resort_data")),
@@ -643,44 +679,7 @@ function CompareResortsContent() {
     }
   };
 
-  // --- BULK SAVE & REDIRECT LOGIC ---
-  const saveAllComparedBudgets = async (uid: string) => {
-    if (!results || results.length === 0) return;
-
-    const guests = Number(sessionStorage.getItem('wedsaas_compare_guests')) || roundedGuests;
-    const days = Number(sessionStorage.getItem('wedsaas_compare_days')) || 1;
-    const checkInDate = sessionStorage.getItem('wedsaas_compare_checkin') || 'Not Selected';
-    const checkOutDate = sessionStorage.getItem('wedsaas_compare_checkout') || 'Not Selected';
-
-    const promises = results.map((resort) => {
-      const docId = uid + "_cmp_" + resort.id + "_" + Date.now();
-      const budgetData = {
-        userId: uid,
-        resortId: resort.id,
-        resortName: resort.name,
-        resortLocation: resort.location,
-        resortImage: resort.image,
-        guests: guests,
-        days: days,
-        checkInDate: checkInDate,
-        checkOutDate: checkOutDate,
-        rooms: resort.rooms || 0,
-        functions: selectedEventNames.length || 1,
-        selectedItems: globalActiveItems,
-        quotes: resort.allQuotes || [],
-        createdAt: new Date()
-      };
-      return setDoc(doc(db, "saved_budgets", docId), budgetData);
-    });
-
-    try {
-      await Promise.all(promises);
-    } catch (error) {
-      console.error("Error saving bulk budgets:", error);
-    }
-  };
-
-  // --- REDIRECT ON RESORT CLICK (Without auto-saving all resorts) ---
+  // --- REDIRECT ON RESORT CLICK (Direct Navigation) ---
   const logSaveAndRedirect = async (id: string, name: string) => {
     if (!currentUser) {
       setPendingResortRedirect({ id, name });
@@ -688,7 +687,7 @@ function CompareResortsContent() {
       return;
     }
 
-    setLoadingText("Opening Resort Page...");
+    setLoadingText("Loading Resort...");
     setLoading(true);
 
     try {
@@ -700,7 +699,6 @@ function CompareResortsContent() {
         timestamp: new Date()
       });
 
-      // Redirect directly to resort page (NO auto-saving all resorts)
       router.push(`/resort/${id}`);
     } catch (e) {
       router.push(`/resort/${id}`);
@@ -750,7 +748,6 @@ function CompareResortsContent() {
           lastLogin: new Date().toISOString()
         }, { merge: true });
 
-        // If user clicked "Save Budget" before login
         if (pendingSaveResort) {
           await saveSingleResortBudget(pendingSaveResort, result.user);
           setPendingSaveResort(null);
@@ -799,6 +796,7 @@ function CompareResortsContent() {
     sessionStorage.removeItem('wedsaas_compare_days');
     sessionStorage.removeItem('wedsaas_compare_checkin');
     sessionStorage.removeItem('wedsaas_compare_checkout');
+    sessionStorage.removeItem('wedsaas_compare_active_items');
     setResults([]);
     setStep(1);
   };
@@ -924,7 +922,7 @@ function CompareResortsContent() {
           <button
             type="button"
             onClick={(e) => {
-              e.stopPropagation(); // Prevents checkbox from toggling when clicking info icon
+              e.stopPropagation();
               setItemModalDoc({ title: item.name, desc, rule: ruleStr, thumb });
             }}
             className="absolute top-2 right-2 bg-white/90 hover:bg-white text-[#6B0D24] w-6 h-6 rounded-full flex items-center justify-center shadow-xs transition-transform hover:scale-110 z-30"
@@ -972,7 +970,7 @@ function CompareResortsContent() {
         </div>
       )}
 
-      {/* PROGRESS BAR CONTAINER (FIXED TOP CLEARANCE FOR NAVBAR ISSUE 2) */}
+      {/* PROGRESS BAR CONTAINER */}
       {step < 6 && (
         <div className="w-full max-w-5xl mx-auto px-4 md:px-8 pt-24 md:pt-28 shrink-0">
           <div className="bg-white p-3 md:p-4 rounded-3xl border border-gray-100 shadow-sm">
@@ -993,7 +991,7 @@ function CompareResortsContent() {
         </div>
       )}
 
-      {/* MAIN CONTENT STEPPER (FIXED TOP CLEARANCE FOR STEP 6 / ISSUE 2) */}
+      {/* MAIN CONTENT STEPPER */}
       <main className={`flex-1 w-full max-w-5xl mx-auto p-4 md:p-8 overflow-y-auto ${step === 6 ? 'pt-24 md:pt-28' : ''}`}>
 
         {/* STEP 1: BASICS */}
@@ -1583,7 +1581,7 @@ function CompareResortsContent() {
                 }
 
                 if (isDisabled) {
-                  cells.push(<div key={day} className="p-1.5 text-gray-300 cursor-not-allowed text-center">{day}</div>);
+                  cells.push(<div key={day} className="p-1.5 text-gray-300 cursor-not-allowed text-center">${day}</div>);
                 } else {
                   cells.push(
                     <button
@@ -1681,7 +1679,7 @@ function CompareResortsContent() {
                   value={authOtp}
                   onChange={(e) => setAuthOtp(e.target.value)}
                   placeholder="------"
-                  className="w-full p-3.5 mb-6 border border-gray-300 rounded-xl outline-none font-black text-center tracking-[0.6em] text-2xl text-gray-900 bg-gray-50 focus:bg-white focus:border-[#6B0D24] transition"
+                  className="w-full p-3.5 mb-6 border border-slate-300 rounded-xl outline-none font-black text-center tracking-[0.6em] text-2xl text-gray-900 bg-gray-50 focus:bg-white focus:border-[#6B0D24] transition"
                 />
                 <button
                   onClick={handleVerifyOTP}
