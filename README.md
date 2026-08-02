@@ -43,5 +43,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 git add .
-git commit -m "v5.0fixed"
+git commit -m "v6.0fixed"
 git push
