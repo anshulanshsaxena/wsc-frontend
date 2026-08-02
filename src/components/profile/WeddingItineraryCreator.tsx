@@ -347,16 +347,18 @@ export default function WeddingItineraryCreator({
               </span>
             </div>
 
-            {/* Editable Couple Name Input */}
-            <div className="flex items-center gap-2 no-print">
+            {/* Editable Couple Name Input (Fixed Mobile Overflow) */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 no-print w-full max-w-full">
               <input
                 type="text"
                 value={coupleName}
                 onChange={(e) => setCoupleName(e.target.value)}
                 placeholder="Bride & Groom Names"
-                className="bg-white/10 border border-white/20 text-white placeholder-gray-300 font-black text-xl md:text-2xl rounded-xl px-3 py-1.5 outline-none focus:border-[#C5A059] transition"
+                className="w-full sm:w-auto max-w-full bg-white/10 border border-white/20 text-white placeholder-gray-300 font-black text-base sm:text-xl md:text-2xl rounded-xl px-3 py-1.5 outline-none focus:border-[#C5A059] transition"
               />
-              <span className="text-xs text-[#C5A059] font-bold hidden md:inline">✏️ Edit Names</span>
+              <span className="text-[11px] sm:text-xs text-[#C5A059] font-bold flex items-center gap-1 shrink-0">
+                ✏️ Edit Names
+              </span>
             </div>
 
             {/* Print View Name Header */}
@@ -406,7 +408,7 @@ export default function WeddingItineraryCreator({
               >
                 {/* Day Header Bar */}
                 <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 pb-4 border-b border-gray-100">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <span
                       className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider ${
                         day.isCheckOut
@@ -419,6 +421,24 @@ export default function WeddingItineraryCreator({
                     <h4 className="font-black text-gray-900 text-base md:text-lg">
                       {day.formattedDate}
                     </h4>
+
+                    {/* DELETE DAY ZERO BUTTON */}
+                    {day.key === 'day_0' && (
+                      <button
+                        onClick={() => {
+                          setHasDayZero(false);
+                          setItinerary((prev) => {
+                            const copy = { ...prev };
+                            delete copy.day_0;
+                            return copy;
+                          });
+                        }}
+                        className="no-print text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1 rounded-xl transition flex items-center gap-1"
+                        title="Remove Day Zero"
+                      >
+                        <i className="ph-bold ph-trash text-xs"></i> Delete Day 0
+                      </button>
+                    )}
                   </div>
 
                   <span className="text-xs font-bold text-[#C5A059] bg-[#FAF6F0] border border-[#C5A059]/20 px-3 py-1 rounded-lg self-start sm:self-auto">
@@ -498,31 +518,37 @@ export default function WeddingItineraryCreator({
                           </button>
                         </div>
 
-                        {/* Choice: Preselected Saved Event Category vs Minor Custom Event */}
-                        <div className="flex gap-2 text-xs font-bold">
-                          <button
-                            type="button"
-                            onClick={() => setIsMinorCustom(false)}
-                            className={`px-3 py-1.5 rounded-lg border transition ${
-                              !isMinorCustom
-                                ? 'bg-[#6B0D24] text-white border-[#6B0D24]'
-                                : 'bg-white text-gray-600 border-gray-200'
-                            }`}
-                          >
-                            Select Saved Function Category
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setIsMinorCustom(true)}
-                            className={`px-3 py-1.5 rounded-lg border transition ${
-                              isMinorCustom
-                                ? 'bg-[#6B0D24] text-white border-[#6B0D24]'
-                                : 'bg-white text-gray-600 border-gray-200'
-                            }`}
-                          >
-                            + Add Minor Custom Event
-                          </button>
-                        </div>
+                        {/* Choice: Hide Saved Categories for Day 0 */}
+                        {day.key !== 'day_0' ? (
+                          <div className="flex gap-2 text-xs font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setIsMinorCustom(false)}
+                              className={`px-3 py-1.5 rounded-lg border transition ${
+                                !isMinorCustom
+                                  ? 'bg-[#6B0D24] text-white border-[#6B0D24]'
+                                  : 'bg-white text-gray-600 border-gray-200'
+                              }`}
+                            >
+                              Select Saved Function Category
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsMinorCustom(true)}
+                              className={`px-3 py-1.5 rounded-lg border transition ${
+                                isMinorCustom
+                                  ? 'bg-[#6B0D24] text-white border-[#6B0D24]'
+                                  : 'bg-white text-gray-600 border-gray-200'
+                              }`}
+                            >
+                              + Add Minor Custom Event
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bg-[#FAF6F0] p-2.5 rounded-xl border border-[#6B0D24]/10 text-xs font-bold text-[#6B0D24]">
+                            <span>ℹ️ Day 0 (Pre-Arrival): Only custom minor events can be added.</span>
+                          </div>
+                        )}
 
                         {/* Event Name Input / Category Dropdown */}
                         <div>
@@ -621,11 +647,22 @@ export default function WeddingItineraryCreator({
                       <button
                         onClick={() => {
                           setAddingDayKey(day.key);
-                          setEventTitle(availableCategoryOptions[0] || '');
+                          if (day.key === 'day_0') {
+                            setIsMinorCustom(true);
+                          } else if (availableCategoryOptions.length > 0) {
+                            setIsMinorCustom(false);
+                            setEventTitle(availableCategoryOptions[0]);
+                          } else {
+                            // If all saved categories are used up, default to minor custom event
+                            setIsMinorCustom(true);
+                          }
                         }}
-                        className="bg-white hover:bg-gray-50 text-[#6B0D24] border border-[#6B0D24]/30 hover:border-[#6B0D24] font-bold px-3.5 py-2 rounded-xl text-xs transition inline-flex items-center gap-1.5 shadow-2xs"
+                        className="bg-white hover:bg-gray-50 text-[#6B0D24] border border-[#6B0D24]/30 hover:border-[#6B0D24] font-bold px-3.5 py-2 rounded-xl text-xs transition inline-flex items-center gap-1.5 shadow-2xs mt-2"
                       >
-                        <i className="ph-bold ph-plus text-sm"></i> Add Event to {day.label}
+                        <i className="ph-bold ph-plus text-sm"></i>
+                        {dayEvents.length > 0
+                          ? `+ Add Another Event to ${day.label}`
+                          : `Add Event to ${day.label}`}
                       </button>
                     )}
                   </div>

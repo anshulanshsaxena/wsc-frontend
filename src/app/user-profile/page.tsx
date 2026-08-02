@@ -31,6 +31,7 @@ import PromoBracket from '@/components/home/PromoBracket';
 import AllOffersModal from '@/components/modals/AllOffersModal';
 import WeddingItineraryCreator from '@/components/profile/WeddingItineraryCreator';
 import SandboxDrawer from '@/components/modals/SandboxDrawer';
+import CompareModal from '@/components/profile/CompareModal';
 
 function UserProfileContent() {
   const router = useRouter();
@@ -1344,119 +1345,13 @@ function UserProfileContent() {
         </div>
       )}
 
-      {/* COMPARATIVE TABLE MODAL */}
-      {compareModalOpen && (
-        <div className="fixed inset-0 z-[20000] bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="text-2xl font-black text-gray-900 flex items-center gap-2">
-                <i className="ph-fill ph-columns text-[#6B0D24]"></i> Head-to-Head Comparison
-              </h3>
-              <button
-                onClick={() => setCompareModalOpen(false)}
-                className="w-10 h-10 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-50 transition shadow-sm shrink-0"
-              >
-                <i className="ph-bold ph-x text-xl"></i>
-              </button>
-            </div>
-
-            <div className="p-6 overflow-x-auto flex-1 custom-scrollbar">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-4 bg-gray-100 font-bold text-gray-900 border border-gray-200">
-                      Package Matrix
-                    </th>
-                    {compareSelections.map((docId) => {
-                      const b = budgets.find((item) => item.docId === docId);
-                      return (
-                        <th
-                          key={docId}
-                          className="p-4 bg-gray-100 font-black text-gray-900 border border-gray-200 text-center"
-                        >
-                          <span className="block text-base">{b?.resortName || 'Resort'}</span>
-                          <span className="block text-xs text-gray-500 font-semibold mt-1">
-                            <i className="ph-fill ph-map-pin"></i> {b?.resortLocation || 'India'}
-                          </span>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="p-4 font-bold border border-gray-200">Visual Portfolio</td>
-                    {compareSelections.map((docId) => {
-                      const b = budgets.find((item) => item.docId === docId);
-                      return (
-                        <td key={docId} className="p-4 border border-gray-200 text-center">
-                          <img
-                            src={b?.resortImage}
-                            alt="Resort"
-                            className="w-44 h-28 object-cover rounded-xl mx-auto shadow-sm"
-                          />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-bold border border-gray-200">Starting Budget</td>
-                    {compareSelections.map((docId) => {
-                      const b = budgets.find((item) => item.docId === docId);
-                      const cheapest = (b?.quotes || []).sort(
-                        (x: any, y: any) => (x.grandTotal || 0) - (y.grandTotal || 0)
-                      )[0];
-                      return (
-                        <td key={docId} className="p-4 border border-gray-200 text-center">
-                          <p className="text-xl font-black text-[#6B0D24]">
-                            ₹ {(cheapest?.grandTotal || 0).toLocaleString('en-IN')}
-                          </p>
-                          <span className="text-[9px] text-gray-400 font-bold block mt-1">
-                            Planner: {cheapest?.plannerName || 'Default'}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-bold border border-gray-200">Capacity & Duration</td>
-                    {compareSelections.map((docId) => {
-                      const b = budgets.find((item) => item.docId === docId);
-                      return (
-                        <td
-                          key={docId}
-                          className="p-4 border border-gray-200 text-center font-bold text-gray-700"
-                        >
-                          <p>{b?.guests || 150} Guests</p>
-                          <p className="text-xs text-gray-500">{b?.days || 2} Days</p>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="p-4 font-bold border border-gray-200">Selected Setup Items</td>
-                    {compareSelections.map((docId) => {
-                      const b = budgets.find((item) => item.docId === docId);
-                      return (
-                        <td key={docId} className="p-4 border border-gray-200 text-left vertical-top">
-                          <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar text-xs">
-                            {(b?.selectedItems || []).map((item: any, idx: number) => (
-                              <div key={idx} className="flex justify-between border-b pb-1">
-                                <span className="font-semibold text-gray-800">{item.name}</span>
-                                <span className="text-[#6B0D24] font-bold">x{item.qty || 1}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* UPGRADED DETAILED COMPARATIVE TABLE MODAL */}
+      <CompareModal
+        isOpen={compareModalOpen}
+        onClose={() => setCompareModalOpen(false)}
+        compareSelections={compareSelections}
+        budgets={budgets}
+      />
 
       {/* PLANNER QUOTE DETAILS MODAL */}
       {selectedQuoteDoc && (
