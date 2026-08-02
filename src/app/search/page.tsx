@@ -219,7 +219,9 @@ function SearchPageContent() {
     <div className="bg-gray-50 font-sans text-gray-800 min-h-screen flex flex-col">
       <GlobalLoader isLoading={isSearching} />
       <SearchNavbar />
-      <PersistentSearchBar onExecuteSearch={handleExecuteSearch} />
+<div className="pt-16 md:pt-20">
+  <PersistentSearchBar onExecuteSearch={handleExecuteSearch} />
+</div>
 
       {!hasSearched ? (
         <HeroLanding onQuickSearch={handleQuickSearch} />

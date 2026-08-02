@@ -580,7 +580,7 @@ function UserProfileContent() {
 
      {/* LOGGED OUT LOGIN OVERLAY WITH LUXURY BACKGROUND IMAGE */}
       {!currentUser && (
-        <div className="fixed top-16 md:top-20 inset-x-0 bottom-0 z-[10000] flex flex-col items-center justify-center p-6 overflow-hidden">
+        <div className="fixed top-16 md:top-20 inset-x-0 bottom-0 z-40 flex flex-col items-center justify-center p-6 overflow-hidden">
           {/* Background Cover Image */}
           <img
             src="https://firebasestorage.googleapis.com/v0/b/saas-c8ee9-c4tkm-india/o/cover%20image%20login%20screen.jpeg?alt=media&token=ef78069e-5263-44aa-a0b1-a5e25fbea24a"

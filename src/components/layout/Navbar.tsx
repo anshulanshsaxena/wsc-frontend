@@ -12,7 +12,7 @@ import FavoritesModal, { FavoriteItem } from '@/components/modals/FavoritesModal
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
+
   // Synchronous initial state from localStorage (0ms delay, no flash)
   const [userName, setUserName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -181,31 +181,31 @@ export default function Navbar() {
             </Link>
           </div>
 
-          {/* User Auth Info, Favorites Button & CTA Button */}
-          <div className="hidden md:flex items-center gap-4">
-            {/* FAVORITES BUTTON (Renders on Frame 0 - 0ms delay, no reloading/flashing) */}
+          {/* SLEEK & ELEGANT COMPACT PILLS CONTAINER (h-8 = 32px height) */}
+          <div className="hidden md:flex items-center gap-2.5">
+            {/* 1. FAVORITES PILL */}
             {userFavorites.length > 0 && (
               <button
                 onClick={() => setFavoritesModalOpen(true)}
-                className="flex items-center gap-1.5 text-xs font-bold text-[#6B0D24] bg-[#FAF6F0] hover:bg-[#6B0D24] hover:text-white border border-[#6B0D24]/20 px-3.5 py-2 rounded-full transition-all shadow-2xs group cursor-pointer"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[11px] font-bold uppercase tracking-wider text-[#6B0D24] bg-[#FAF6F0] hover:bg-[#6B0D24] hover:text-white border border-[#6B0D24]/20 transition-all shadow-2xs group cursor-pointer shrink-0"
                 title="View Favorite Resorts"
               >
-                <i className="ph-fill ph-heart text-sm text-[#6B0D24] group-hover:text-white transition-colors"></i>
+                <i className="ph-fill ph-heart text-xs text-[#6B0D24] group-hover:text-white transition-colors"></i>
                 <span>Favorites ({userFavorites.length})</span>
               </button>
             )}
 
+            {/* 2. USER NAME PILL & SIGN OUT BUTTON */}
             {currentUser || userName ? (
-              <div className="flex items-center gap-3">
-                {/* Name Badge */}
+              <div className="flex items-center gap-2">
                 {userName && userName.trim() !== '' && (
-                  <span className="text-xs font-black uppercase tracking-wider text-[#6B0D24] bg-[#6B0D24]/5 px-3 py-1.5 rounded-xl border border-[#6B0D24]/10">
+                  <span className="inline-flex items-center justify-center h-8 px-3 rounded-full text-[11px] font-black uppercase tracking-wider text-[#6B0D24] bg-[#6B0D24]/5 border border-[#6B0D24]/15 shrink-0">
                     {userName}
                   </span>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="text-xs font-bold text-white bg-[#6B0D24] hover:bg-stone-900 px-4 py-2 rounded-full transition-colors shadow-xs"
+                  className="inline-flex items-center justify-center h-8 px-3.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-white bg-[#6B0D24] hover:bg-stone-900 transition-colors shadow-2xs shrink-0 cursor-pointer"
                 >
                   Sign Out
                 </button>
@@ -213,15 +213,16 @@ export default function Navbar() {
             ) : (
               <Link
                 href="/user-profile"
-                className="text-xs font-bold text-[#6B0D24] hover:text-stone-900 bg-[#6B0D24]/10 hover:bg-[#6B0D24]/20 px-4 py-2 rounded-full transition-colors"
+                className="inline-flex items-center justify-center h-8 px-3.5 rounded-full text-[11px] font-bold uppercase tracking-wider text-[#6B0D24] hover:text-stone-900 bg-[#6B0D24]/10 hover:bg-[#6B0D24]/20 border border-[#6B0D24]/20 transition-colors shrink-0"
               >
                 Sign In
               </Link>
             )}
 
+            {/* 3. GET A QUOTE PILL */}
             <Link
               href="/compare-resorts"
-              className="bg-gray-900 text-white px-6 py-2.5 rounded-full font-bold hover:bg-[#6B0D24] transition-colors inline-block text-sm"
+              className="inline-flex items-center justify-center h-8 px-4 rounded-full text-[11px] font-black uppercase tracking-wider text-white bg-gray-900 hover:bg-[#6B0D24] transition-colors shadow-2xs shrink-0"
             >
               Get a Quote
             </Link>
@@ -232,10 +233,10 @@ export default function Navbar() {
             {userFavorites.length > 0 && (
               <button
                 onClick={() => setFavoritesModalOpen(true)}
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-[#FAF6F0] text-[#6B0D24] border border-[#6B0D24]/20"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FAF6F0] text-[#6B0D24] border border-[#6B0D24]/20"
                 title="View Favorites"
               >
-                <i className="ph-fill ph-heart text-base"></i>
+                <i className="ph-fill ph-heart text-xs"></i>
               </button>
             )}
 

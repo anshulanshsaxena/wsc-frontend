@@ -43,5 +43,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 git add .
-git commit -m "v4.0 resend otp implimented"
+git commit -m "v5.0fixed"
 git push

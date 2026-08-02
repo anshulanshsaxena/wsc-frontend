@@ -428,7 +428,7 @@ function ResortPageContent({ resortId }: { resortId: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF6F0]/30 text-gray-900 font-sans pb-48 md:pb-56">
+    <div className="min-h-screen bg-white text-gray-900 font-sans pb-48 md:pb-56">
       {/* Navbar */}
       <Navbar />
 
